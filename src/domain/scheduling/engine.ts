@@ -18,7 +18,7 @@
 import { addDays, compareKeys, parseKey, type DateKey } from "@/lib/dates";
 import { newId } from "@/lib/ids";
 import { REVISION_ORDER } from "@/domain/labels";
-import { fill, type RevisionStrategy, type TaskTemplate, type TemplateContext } from "@/domain/revision/strategy";
+import { OFFSETS, fill, type RevisionStrategy, type TaskTemplate, type TemplateContext } from "@/domain/revision/strategy";
 import type { Chapter, Exam, FrenchExamType, Id, RevisionType, Subject, Task } from "@/domain/types";
 
 export interface DatedRevision {
@@ -39,6 +39,19 @@ function chapterDate(j0: DateKey, template: TaskTemplate, shift: number): { date
   const date = addDays(j0, offset + shift);
   const visibleFrom = template.revisionType === "J1" ? addDays(j0, offset) : null;
   return { date, visibleFrom };
+}
+
+/**
+ * Applies the weekend rule to a chapter task created before the rule existed (data migration).
+ * Returns the updated fields, or null when nothing must change.
+ */
+export function weekendShiftPatch(task: Pick<Task, "taskType" | "status" | "visibleFrom" | "revisionType" | "scheduledDate">, j0: DateKey | null): { scheduledDate: DateKey; visibleFrom: DateKey | null } | null {
+  if (task.taskType !== "CHAPTER" || task.status !== "UPCOMING" || task.visibleFrom) return null;
+  if (!j0 || weekendShift(j0) === 0) return null;
+  const offset = OFFSETS[task.revisionType as keyof typeof OFFSETS];
+  if (offset === undefined || offset < 1) return null;
+  if (task.scheduledDate !== addDays(j0, offset)) return null; // moved by hand or already shifted
+  return { scheduledDate: addDays(j0, offset + 1), visibleFrom: task.revisionType === "J1" ? addDays(j0, 1) : null };
 }
 
 export function calculateRevisionDates(j0: DateKey, strategy: RevisionStrategy): DatedRevision[] {

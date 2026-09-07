@@ -257,6 +257,11 @@ export async function answerExamResult(
   });
 }
 
+/** Deletes one task (used to remove a missed task from the history, e.g. a J1 that fell on a Saturday before the weekend rule). */
+export async function deleteTask(taskId: Id): Promise<void> {
+  await db.tasks.delete(taskId);
+}
+
 /** Dangerous, explicit action: forgets J0 and deletes not-yet-done chapter tasks. History is kept. */
 export async function resetChapterSchedule(chapterId: Id, now: string = nowIso()): Promise<void> {
   await db.transaction("rw", SCHEDULING_TABLES, async () => {

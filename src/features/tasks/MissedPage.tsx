@@ -1,9 +1,12 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
+import { Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { RevisionBadge } from "@/components/domain/badges";
-import { Badge, EmptyState, PageHeader, Select, Stat } from "@/components/ui/primitives";
+import { Badge, ConfirmDialog, EmptyState, PageHeader, Select, Stat } from "@/components/ui/primitives";
+import type { Task } from "@/domain/types";
+import { deleteTask } from "@/services/scheduling";
 import { db } from "@/db/db";
 import { REVISION_LABELS, REVISION_ORDER } from "@/domain/labels";
 import type { RevisionType } from "@/domain/types";
@@ -24,6 +27,7 @@ export function MissedPage() {
   const [month, setMonth] = useState("");
   const [type, setType] = useState("");
   const [year, setYear] = useState("");
+  const [deleting, setDeleting] = useState<Task | null>(null);
 
   const months = useMemo(() => Array.from(new Set((data?.missed ?? []).map((t) => monthKey(t.scheduledDate)))).sort().reverse(), [data]);
   const years = useMemo(() => Array.from(new Set((data?.missed ?? []).map((t) => t.scheduledDate.slice(0, 4)))).sort().reverse(), [data]);
@@ -91,8 +95,8 @@ export function MissedPage() {
       ) : (
         <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
           {filtered.map((t) => (
-            <li key={t.id}>
-              <Link href={paths.task(t.id)} className="flex items-start gap-3 px-3.5 py-3 hover:bg-surface-2">
+            <li key={t.id} className="flex items-start">
+              <Link href={paths.task(t.id)} className="flex min-w-0 flex-1 items-start gap-3 px-3.5 py-3 hover:bg-surface-2">
                 <span className="w-20 shrink-0 text-sm tabular-nums text-muted">{formatDateShort(t.scheduledDate)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-xs text-muted">
@@ -106,10 +110,26 @@ export function MissedPage() {
                   </span>
                 </span>
               </Link>
+              <button type="button" onClick={() => setDeleting(t)} className="m-2 rounded-md p-2 text-muted hover:text-danger" aria-label={`Supprimer la tâche ratée ${t.title}`}>
+                <Trash2 className="h-4 w-4" />
+              </button>
             </li>
           ))}
         </ul>
       )}
+      <ConfirmDialog
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        danger
+        confirmLabel="Supprimer"
+        title="Supprimer cette tâche ratée ?"
+        onConfirm={async () => {
+          if (deleting) await deleteTask(deleting.id);
+          setDeleting(null);
+        }}
+      >
+        « {deleting?.title} » ({deleting ? formatDateShort(deleting.scheduledDate) : ""}) sera retirée de l'historique et des statistiques. Utile pour un raté qui n'aurait pas dû exister (par exemple un J1 tombé un samedi avant la règle du week-end).
+      </ConfirmDialog>
     </div>
   );
 }

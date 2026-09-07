@@ -10,6 +10,7 @@ import {
   reconcileExamTasks,
   sortTasksForDay,
   summarizeDuration,
+  weekendShiftPatch,
 } from "@/domain/scheduling/engine";
 import { getStrategy } from "@/domain/revision";
 import type { Chapter, Exam, Subject, Task } from "@/domain/types";
@@ -346,5 +347,25 @@ describe("Day ordering and duration summary", () => {
     expect(summary.minutes).toBe(60);
     expect(summary.withoutDuration).toBe(4);
     expect(summary.hasEstimates).toBe(true);
+  });
+});
+
+describe("Migration — weekend rule applied to existing tasks", () => {
+  it("shifts upcoming J1/J3/J7/J14 of a Friday J0 and leaves everything else alone", () => {
+    const s = subject("MATHEMATICS");
+    const c = chapter(s.id, "2026-09-04"); // Friday
+    // Simulate tasks created before the rule: plain offsets, no visibleFrom.
+    const legacy = generateChapterTasks({ chapter: c, subject: s, strategy: getStrategy("MATHEMATICS"), j0: "2026-09-01", today: "2026-09-01", now: NOW })
+      .map((t) => ({ ...t, scheduledDate: t.scheduledDate.replace("2026-09-0", "2026-09-0"), visibleFrom: null }));
+    const j1 = { ...legacy[1], scheduledDate: "2026-09-05" };
+    expect(weekendShiftPatch(j1, "2026-09-04")).toEqual({ scheduledDate: "2026-09-06", visibleFrom: "2026-09-05" });
+    const j3 = { ...legacy[2], scheduledDate: "2026-09-07" };
+    expect(weekendShiftPatch(j3, "2026-09-04")).toEqual({ scheduledDate: "2026-09-08", visibleFrom: null });
+    const j0 = { ...legacy[0], scheduledDate: "2026-09-04" };
+    expect(weekendShiftPatch(j0, "2026-09-04")).toBeNull();
+    expect(weekendShiftPatch({ ...j1, status: "MISSED" }, "2026-09-04")).toBeNull();
+    expect(weekendShiftPatch({ ...j1, scheduledDate: "2026-09-10" }, "2026-09-04")).toBeNull(); // moved by hand
+    expect(weekendShiftPatch(j1, "2026-09-01")).toBeNull(); // Tuesday J0: no shift
+    expect(weekendShiftPatch(j1, null)).toBeNull();
   });
 });

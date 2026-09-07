@@ -1,10 +1,10 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowLeft, Check, Pencil, Undo2 } from "lucide-react";
+import { ArrowLeft, Check, Pencil, Trash2, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { RevisionBadge, StatusBadge, displayStatus } from "@/components/domain/badges";
-import { Button, Card, EmptyState, Field, Input, Modal, SectionTitle, Textarea } from "@/components/ui/primitives";
+import { Button, Card, ConfirmDialog, EmptyState, Field, Input, Modal, SectionTitle, Textarea } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { db } from "@/db/db";
 import { REVISION_LABELS } from "@/domain/labels";
@@ -12,12 +12,13 @@ import type { Task } from "@/domain/types";
 import { ResourceList } from "@/features/resources/ResourceList";
 import { formatDateLong, formatDateTime, formatMinutes, isValidKey, type DateKey } from "@/lib/dates";
 import { Link, paths, useRouter } from "@/lib/router";
-import { completeTask, moveTaskDate, uncompleteTask, updateTaskDetails } from "@/services/scheduling";
+import { completeTask, deleteTask, moveTaskDate, uncompleteTask, updateTaskDetails } from "@/services/scheduling";
 
 export function TaskPage({ id, today }: { id: string; today: DateKey }) {
   const toast = useToast();
   const { back } = useRouter();
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const data = useLiveQuery(async () => {
     const task = await db.tasks.get(id);
     if (!task) return null;
@@ -132,6 +133,11 @@ export function TaskPage({ id, today }: { id: string; today: DateKey }) {
           <Button variant="ghost" onClick={() => setEditing(true)} icon={<Pencil className="h-4 w-4" aria-hidden />}>
             Modifier
           </Button>
+          {task.status === "MISSED" && (
+            <Button variant="ghost" onClick={() => setConfirmDelete(true)} icon={<Trash2 className="h-4 w-4" aria-hidden />}>
+              Supprimer ce raté
+            </Button>
+          )}
         </div>
       </Card>
 
@@ -150,6 +156,21 @@ export function TaskPage({ id, today }: { id: string; today: DateKey }) {
       </section>
 
       {editing && <EditTaskDialog task={task} onClose={() => setEditing(false)} today={today} />}
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        danger
+        confirmLabel="Supprimer"
+        title="Supprimer cette tâche ratée ?"
+        onConfirm={async () => {
+          await deleteTask(task.id);
+          setConfirmDelete(false);
+          toast("Tâche ratée supprimée.");
+          back();
+        }}
+      >
+        Elle sera retirée de l'historique et des statistiques.
+      </ConfirmDialog>
     </div>
   );
 }

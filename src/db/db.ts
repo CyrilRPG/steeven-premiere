@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
+import { weekendShiftPatch } from "@/domain/scheduling/engine";
 import type {
   AnkiExport,
   Chapter,
@@ -77,10 +78,21 @@ export class SteevenDatabase extends Dexie {
           if (s.scheduleEnabled === undefined) s.scheduleEnabled = true;
         });
       });
+    // v3: apply the weekend rule to UPCOMING chapter tasks created before the rule existed.
+    this.version(3)
+      .stores({})
+      .upgrade(async (tx) => {
+        const chapters = (await tx.table("chapters").toArray()) as { id: string; startedAt: string | null }[];
+        const j0ById = new Map(chapters.map((c) => [c.id, c.startedAt]));
+        await tx.table("tasks").toCollection().modify((t: Task) => {
+          const patch = weekendShiftPatch(t, j0ById.get(t.chapterId) ?? null);
+          if (patch) Object.assign(t, patch);
+        });
+      });
   }
 }
 
-export const DB_SCHEMA_VERSION = 2;
+export const DB_SCHEMA_VERSION = 3;
 
 export const db = new SteevenDatabase();
 
