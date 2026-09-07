@@ -14,7 +14,9 @@ interface Props {
 
 export function TimetableDay({ slots, nowHHMM, emptyLabel = "Pas de cours.", onSelect }: Props) {
   if (slots.length === 0) return <p className="px-3.5 py-3 text-sm text-muted">{emptyLabel}</p>;
-  const total = slots.reduce((acc, s) => acc + slotMinutes(s), 0);
+  // A/B half-group slots at the same time count once.
+  const unique = Array.from(new Map(slots.map((s) => [, s])).values());
+  const total = unique.reduce((acc, s) => acc + slotMinutes(s), 0);
   return (
     <div>
       <ul className="divide-y divide-border">
@@ -52,7 +54,7 @@ export function TimetableDay({ slots, nowHHMM, emptyLabel = "Pas de cours.", onS
         })}
       </ul>
       <p className="border-t border-border px-3.5 py-2 text-xs text-muted">
-        {slots.length} cours · {formatMinutes(total)} · fin à {slots[slots.length - 1].end}
+        {unique.length} cours · {formatMinutes(total)} · fin à {slots[slots.length - 1].end}
       </p>
     </div>
   );
