@@ -211,6 +211,8 @@ export interface Settings {
   onboardingDone: boolean;
   /** Date key of the last day a daily notification was shown (avoids duplicates). */
   lastNotificationDate: DateKey | null;
+  /** Half-group for A/B timetable slots (null = unknown, show both). */
+  timetableGroup?: "A" | "B" | null;
   updatedAt: string;
 }
 

@@ -15,6 +15,7 @@ export type Route =
   | { name: "principles" }
   | { name: "settings" }
   | { name: "calendar" }
+  | { name: "timetable" }
   | { name: "notFound" };
 
 export function parseRoute(pathname: string, search: string): Route {
@@ -42,6 +43,8 @@ export function parseRoute(pathname: string, search: string): Route {
       return { name: "settings" };
     case "calendrier":
       return { name: "calendar" };
+    case "emploi-du-temps":
+      return { name: "timetable" };
     default:
       return { name: "notFound" };
   }
@@ -60,6 +63,7 @@ export const paths = {
   principles: () => "/principes",
   settings: () => "/parametres",
   calendar: () => "/calendrier",
+  timetable: () => "/emploi-du-temps",
 };
 
 interface RouterState {

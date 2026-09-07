@@ -2,8 +2,10 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { CheckCircle2 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ExamResultCard } from "@/components/domain/ExamResultCard";
+import { TimetableDay } from "@/components/domain/TimetableDay";
+import { WEEKDAY_LABELS, slotsForDay, weekdayOf } from "@/domain/timetable";
 import { TaskCard } from "@/components/domain/TaskCard";
 import { Card, EmptyState, ProgressBar, SectionTitle } from "@/components/ui/primitives";
 import { db } from "@/db/db";
@@ -13,10 +15,21 @@ import { useSettings } from "@/hooks/useSettings";
 import { addDays, diffDays, formatDateFull, formatMinutes, formatRelativeDays, type DateKey } from "@/lib/dates";
 import { Link, paths } from "@/lib/router";
 
+const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
 export function TodayPage({ today }: { today: DateKey }) {
   const settings = useSettings();
   const subjects = useSubjectMap();
   const chapters = useChapterMap();
+  const timetable = useLiveQuery(() => db.timetable.toArray(), []) ?? [];
+  const [nowHHMM, setNowHHMM] = useState(() => hhmm(new Date()));
+  useEffect(() => {
+    const id = setInterval(() => setNowHHMM(hhmm(new Date())), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const tomorrow = addDays(today, 1);
+  const todaySlots = slotsForDay(timetable, weekdayOf(today), settings.timetableGroup ?? null);
+  const tomorrowSlots = slotsForDay(timetable, weekdayOf(tomorrow), settings.timetableGroup ?? null);
 
   const data = useLiveQuery(async () => {
     const [todayTasks, extra, upcomingExams, pastExams, results] = await Promise.all([
@@ -62,6 +75,20 @@ export function TodayPage({ today }: { today: DateKey }) {
         <h1 className="text-2xl font-semibold tracking-tight">Bonjour {settings.userName}</h1>
         <p className="text-sm text-muted">{formatDateFull(today)}</p>
       </header>
+
+      <section>
+        <SectionTitle action={<Link href={paths.timetable()} className="text-sm font-medium text-accent">Modifier</Link>}>Emploi du temps</SectionTitle>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Card>
+            <p className="border-b border-border px-3.5 py-2 text-xs font-semibold uppercase tracking-wide text-muted">Aujourd'hui · {WEEKDAY_LABELS[weekdayOf(today)]}</p>
+            <TimetableDay slots={todaySlots} nowHHMM={nowHHMM} emptyLabel="Pas de cours aujourd'hui." />
+          </Card>
+          <Card>
+            <p className="border-b border-border px-3.5 py-2 text-xs font-semibold uppercase tracking-wide text-muted">Demain · {WEEKDAY_LABELS[weekdayOf(tomorrow)]}</p>
+            <TimetableDay slots={tomorrowSlots} nowHHMM={null} emptyLabel="Pas de cours demain." />
+          </Card>
+        </div>
+      </section>
 
       <section>
         <SectionTitle>Programme du jour</SectionTitle>

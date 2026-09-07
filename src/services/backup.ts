@@ -9,6 +9,7 @@ import { defaultSettings } from "@/db/seed";
 import type { Settings, StoredFile } from "@/domain/types";
 import { isValidKey, todayKey } from "@/lib/dates";
 import { nowIso } from "@/lib/ids";
+import { seedTimetableIfNeeded } from "@/services/timetable";
 
 export const BACKUP_FORMAT_VERSION = 1;
 export const BACKUP_APP = "steeven-premiere";
@@ -231,6 +232,8 @@ export async function restoreBackup(parsed: ParsedBackup): Promise<void> {
     await db.meta.put({ key: "initialized", value: nowIso() });
     await db.meta.put({ key: "lastRestore", value: { at: nowIso(), exportedAt: document.exportedAt } });
   });
+  // Backups from versions without a timetable get the default one.
+  await seedTimetableIfNeeded();
 }
 
 /** Deletes everything and recreates the default tree. */

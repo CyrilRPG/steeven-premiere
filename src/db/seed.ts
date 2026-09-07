@@ -2,6 +2,7 @@ import { db } from "@/db/db";
 import { SVT_WRITING_TIPS } from "@/domain/revision/strategies/svt";
 import type { Folder, Settings, StrategyType, Subject } from "@/domain/types";
 import { newId, nowIso } from "@/lib/ids";
+import { seedTimetableIfNeeded } from "@/services/timetable";
 
 export const DEFAULT_USER_NAME = "Steeven";
 
@@ -20,6 +21,7 @@ export function defaultSettings(now: string = nowIso()): Settings {
     schoolYear: defaultSchoolYear(),
     onboardingDone: false,
     lastNotificationDate: null,
+    timetableGroup: null,
     updatedAt: now,
   };
 }
@@ -89,6 +91,7 @@ export async function ensureInitialized(): Promise<void> {
     if (!(await db.settings.get("settings"))) await db.settings.add(defaultSettings(now));
     await db.meta.put({ key: "initialized", value: now });
   });
+  await seedTimetableIfNeeded();
 }
 
 export async function getSettings(): Promise<Settings> {

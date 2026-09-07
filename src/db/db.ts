@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from "dexie";
 import { weekendShiftPatch } from "@/domain/scheduling/engine";
+import type { TimetableSlot } from "@/domain/timetable";
 import type {
   AnkiExport,
   Chapter,
@@ -35,6 +36,7 @@ export class SteevenDatabase extends Dexie {
   ankiExports!: EntityTable<AnkiExport, "id">;
   settings!: EntityTable<Settings, "id">;
   meta!: EntityTable<MetaEntry, "key">;
+  timetable!: EntityTable<TimetableSlot, "id">;
 
   constructor(name = "steeven-premiere") {
     super(name);
@@ -89,10 +91,12 @@ export class SteevenDatabase extends Dexie {
           if (patch) Object.assign(t, patch);
         });
       });
+    // v4: weekly timetable (emploi du temps).
+    this.version(4).stores({ timetable: "id, weekday" });
   }
 }
 
-export const DB_SCHEMA_VERSION = 3;
+export const DB_SCHEMA_VERSION = 4;
 
 export const db = new SteevenDatabase();
 
@@ -109,6 +113,7 @@ export const DATA_TABLES = [
   "ankiExports",
   "settings",
   "meta",
+  "timetable",
 ] as const;
 
 export type DataTableName = (typeof DATA_TABLES)[number];

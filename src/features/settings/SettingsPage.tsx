@@ -10,6 +10,7 @@ import { ensureInitialized, updateSettings } from "@/db/seed";
 import type { Theme } from "@/domain/types";
 import { useSettings } from "@/hooks/useSettings";
 import { formatDateTime } from "@/lib/dates";
+import { Link, paths } from "@/lib/router";
 import { downloadBlob } from "@/lib/download";
 import { backupFileName, exportJsonBackup, exportZipBackup, parseBackupFile, resetAllData, restoreBackup, type ParsedBackup } from "@/services/backup";
 import { storageUsage } from "@/services/courses";
@@ -127,6 +128,22 @@ export function SettingsPage() {
               </Button>
             </div>
           </Field>
+        </Card>
+      </section>
+
+      <section>
+        <SectionTitle>Emploi du temps</SectionTitle>
+        <Card className="space-y-3 p-4">
+          <Field label="Mon groupe (cours en demi-classe A / B)" htmlFor="settings-group" hint="Les créneaux de l'autre groupe sont masqués sur Aujourd'hui.">
+            <Select id="settings-group" value={settings.timetableGroup ?? ""} onChange={(e) => updateSettings({ timetableGroup: (e.target.value || null) as "A" | "B" | null })} className="max-w-60">
+              <option value="">Je ne sais pas encore</option>
+              <option value="A">Groupe A</option>
+              <option value="B">Groupe B</option>
+            </Select>
+          </Field>
+          <Link href={paths.timetable()} className="inline-flex h-10 items-center rounded-lg border border-border px-3 text-sm font-medium hover:bg-surface-2">
+            Modifier l'emploi du temps
+          </Link>
         </Card>
       </section>
 
