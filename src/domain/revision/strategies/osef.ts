@@ -15,7 +15,7 @@ export const osefStrategy: RevisionStrategy = {
       revisionType: "J0",
       offsetDays: OFFSETS.J0,
       title: "Devoir {subject}",
-      description: "Faire le devoir de {subject} donné avec le cours « {chapter} » (exercices, lecture, préparation demandée).",
+      description: "Faire le devoir donné en {subject} avec le cours « {chapter} » (exercices, lecture, préparation demandée).",
       estimatedMinutes: null,
       durationIsEstimate: true,
     },
