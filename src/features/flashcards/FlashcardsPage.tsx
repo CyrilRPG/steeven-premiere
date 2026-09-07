@@ -1,28 +1,23 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import { Download, Layers, Plus, Sparkles, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Button, Card, EmptyState, Field, InlineError, InlineInfo, Modal, PageHeader, SectionTitle, Select, Textarea, cx } from "@/components/ui/primitives";
+import { ClipboardCopy, Download, Layers, Plus, Trash2, Upload } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Button, EmptyState, Field, InlineError, InlineInfo, Modal, PageHeader, SectionTitle, Select, Textarea, cx } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { db } from "@/db/db";
 import type { Chapter, Course, Flashcard, Subject } from "@/domain/types";
-import { useOnline } from "@/hooks/useData";
-import { formatDateShort, formatDateTime, isoToKey } from "@/lib/dates";
+import { formatDateShort, isoToKey } from "@/lib/dates";
 import { downloadBlob } from "@/lib/download";
 import { paths, useRouter } from "@/lib/router";
-import { AINotConfiguredError, AIOfflineError, aiProvider, type AIStatus, type GeneratedCard } from "@/services/ai/provider";
-import { addManualFlashcard, deleteChapterFlashcards, deleteFlashcard, exportChapterToAnki, saveGeneratedFlashcards, updateFlashcard } from "@/services/flashcards";
+import { addManualFlashcard, deleteChapterFlashcards, deleteFlashcard, exportChapterToAnki, saveImportedFlashcards, updateFlashcard } from "@/services/flashcards";
+import { buildGenerationPrompt, parseFlashcards, type ImportResult } from "@/services/flashcards-import";
 
 export function FlashcardsPage({ chapterId }: { chapterId?: string }) {
   const { navigate } = useRouter();
   const data = useLiveQuery(async () => {
     const [chapters, subjects, cards, exports] = await Promise.all([db.chapters.toArray(), db.subjects.toArray(), db.flashcards.toArray(), db.ankiExports.orderBy("exportedAt").reverse().limit(10).toArray()]);
     return { chapters, subjects, cards, exports };
-  }, []);
-  const [aiStatus, setAiStatus] = useState<AIStatus | null>(null);
-  useEffect(() => {
-    void aiProvider.getStatus().then(setAiStatus);
   }, []);
 
   if (!data) return null;
@@ -31,7 +26,7 @@ export function FlashcardsPage({ chapterId }: { chapterId?: string }) {
   const subject = chapter ? subjectById.get(chapter.subjectId) : undefined;
 
   if (chapter && subject) {
-    return <ChapterFlashcards chapter={chapter} subject={subject} cards={data.cards.filter((c) => c.chapterId === chapter.id)} aiStatus={aiStatus} />;
+    return <ChapterFlashcards chapter={chapter} subject={subject} cards={data.cards.filter((c) => c.chapterId === chapter.id)} />;
   }
 
   const counts = new Map<string, number>();
@@ -40,8 +35,7 @@ export function FlashcardsPage({ chapterId }: { chapterId?: string }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Flashcards" subtitle="Génération par IA à partir des cours importés, puis export vers Anki." />
-      {aiStatus && !aiStatus.configured && <InlineInfo>Génération IA non configurée. Configurer un fournisseur IA dans l'environnement (ANTHROPIC_API_KEY côté serveur) pour utiliser cette fonction. Tu peux quand même créer des cartes à la main et les exporter.</InlineInfo>}
+      <PageHeader title="Flashcards" subtitle="Importe des cartes créées ailleurs (script, ChatGPT, Claude…), corrige-les, puis exporte-les vers Anki. Aucune clé API." />
       <section>
         <SectionTitle>Choisir un chapitre</SectionTitle>
         {sorted.length === 0 ? (
@@ -83,11 +77,12 @@ export function FlashcardsPage({ chapterId }: { chapterId?: string }) {
   );
 }
 
-function ChapterFlashcards({ chapter, subject, cards, aiStatus }: { chapter: Chapter; subject: Subject; cards: Flashcard[]; aiStatus: AIStatus | null }) {
+function ChapterFlashcards({ chapter, subject, cards }: { chapter: Chapter; subject: Subject; cards: Flashcard[] }) {
   const toast = useToast();
   const { navigate } = useRouter();
   const courses = useLiveQuery(() => db.courses.where("chapterId").equals(chapter.id).toArray(), [chapter.id]) ?? [];
-  const [generator, setGenerator] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [prompting, setPrompting] = useState(false);
   const [adding, setAdding] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const sorted = useMemo(() => [...cards].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)), [cards]);
@@ -110,18 +105,22 @@ function ChapterFlashcards({ chapter, subject, cards, aiStatus }: { chapter: Cha
         subtitle={`${cards.length} carte${cards.length > 1 ? "s" : ""}`}
       />
       <div className="grid grid-cols-2 gap-2">
-        <Button variant="primary" onClick={() => setGenerator(true)} icon={<Sparkles className="h-4 w-4" aria-hidden />} disabled={courses.length === 0}>
-          Générer (IA)
+        <Button variant="primary" onClick={() => setImporting(true)} icon={<Upload className="h-4 w-4" aria-hidden />}>
+          Importer des cartes
+        </Button>
+        <Button onClick={() => setPrompting(true)} icon={<ClipboardCopy className="h-4 w-4" aria-hidden />} disabled={courses.length === 0}>
+          Copier le prompt + cours
         </Button>
         <Button onClick={() => setAdding(true)} icon={<Plus className="h-4 w-4" aria-hidden />}>
           Ajouter une carte
         </Button>
-        <Button onClick={exportAnki} disabled={cards.length === 0} icon={<Download className="h-4 w-4" aria-hidden />} className="col-span-2">
+        <Button onClick={exportAnki} disabled={cards.length === 0} icon={<Download className="h-4 w-4" aria-hidden />}>
           Exporter vers Anki ({cards.length})
         </Button>
       </div>
-      {courses.length === 0 && <InlineInfo>Aucun cours dans ce chapitre : importe un cours pour pouvoir générer des flashcards.</InlineInfo>}
-      {aiStatus && !aiStatus.configured && <InlineInfo>Génération IA non configurée. Configurer un fournisseur IA dans l'environnement pour utiliser cette fonction.</InlineInfo>}
+      <p className="text-xs text-muted">
+        Marche à suivre : « Copier le prompt + cours » → coller dans ChatGPT, Claude ou Gemini → copier la réponse JSON → « Importer des cartes ». Formats acceptés à l'import : JSON, TSV (Anki), CSV, texte Q:/R:.
+      </p>
 
       {sorted.length === 0 ? (
         <EmptyState title="Aucune flashcard pour ce chapitre." icon={<Layers className="h-5 w-5" aria-hidden />} />
@@ -141,7 +140,8 @@ function ChapterFlashcards({ chapter, subject, cards, aiStatus }: { chapter: Cha
       )}
       <p className="text-xs text-muted">Export : fichier texte tabulé UTF-8 (Front, Back, Tags) avec le tag {`Premiere::${subject.name}::${chapter.name}`.replace(/\s+/g, "_")}. Dans Anki : Importer → sélectionner le fichier → vérifier que Front et Back sont associés.</p>
 
-      {generator && <GeneratorDialog chapter={chapter} subject={subject} courses={courses} existingCount={cards.length} onClose={() => setGenerator(false)} />}
+      {importing && <ImportDialog chapter={chapter} subject={subject} existingCount={cards.length} onClose={() => setImporting(false)} />}
+      {prompting && <PromptDialog chapter={chapter} subject={subject} courses={courses} onClose={() => setPrompting(false)} />}
       {adding && <ManualCardDialog chapter={chapter} subject={subject} onClose={() => setAdding(false)} />}
       <Modal
         open={confirmClear}
@@ -176,7 +176,7 @@ function CardEditor({ card, index }: { card: Flashcard; index: number }) {
     <li className="rounded-xl border border-border bg-surface p-3">
       <div className="mb-1 flex items-center justify-between text-xs text-muted">
         <span>
-          #{index} · {card.origin === "AI" ? "IA" : "Manuelle"}
+          #{index} · {card.origin === "MANUAL" ? "Manuelle" : "Importée"}
         </span>
         <button type="button" onClick={() => deleteFlashcard(card.id)} className="rounded-md p-1 hover:text-danger" aria-label="Supprimer la carte">
           <Trash2 className="h-4 w-4" />
@@ -238,142 +238,142 @@ function ManualCardDialog({ chapter, subject, onClose }: { chapter: Chapter; sub
   );
 }
 
-function GeneratorDialog({ chapter, subject, courses, existingCount, onClose }: { chapter: Chapter; subject: Subject; courses: Course[]; existingCount: number; onClose: () => void }) {
+const FORMAT_LABELS: Record<ImportResult["format"], string> = { json: "JSON", tsv: "TSV", csv: "CSV", text: "texte Q:/R:", unknown: "inconnu" };
+
+function ImportDialog({ chapter, subject, existingCount, onClose }: { chapter: Chapter; subject: Subject; existingCount: number; onClose: () => void }) {
   const toast = useToast();
-  const online = useOnline();
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(courses.filter((c) => c.extractedText.trim()).map((c) => c.id)));
+  const [text, setText] = useState("");
   const [mode, setMode] = useState<"add" | "replace">("add");
-  const [phase, setPhase] = useState<"select" | "running" | "review">("select");
-  const [progress, setProgress] = useState<[number, number]>([0, 0]);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ cards: GeneratedCard[]; warnings: string[]; parts: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const result = useMemo(() => parseFlashcards(text), [text]);
 
-  const chosen = courses.filter((c) => selected.has(c.id));
-  const chars = chosen.reduce((acc, c) => acc + c.extractedText.length, 0);
-
-  const run = async () => {
-    setError(null);
-    setPhase("running");
-    try {
-      const r = await aiProvider.generateFlashcards({
-        subjectName: subject.name,
-        chapterName: chapter.name,
-        strategyType: subject.strategyType,
-        courses: chosen,
-        onProgress: (done, total) => setProgress([done, total]),
-      });
-      setResult(r);
-      setPhase("review");
-    } catch (e) {
-      if (e instanceof AINotConfiguredError || e instanceof AIOfflineError) setError(e.message);
-      else setError(e instanceof Error ? e.message : "La génération a échoué. Les cours sont conservés, tu peux réessayer.");
-      setPhase("select");
-    }
+  const onFile = async (file: File) => {
+    setText(await file.text());
   };
 
   const save = async () => {
-    if (!result) return;
-    const r = await saveGeneratedFlashcards({ chapterId: chapter.id, subjectName: subject.name, chapterName: chapter.name, cards: result.cards, sourceCourseIds: chosen.map((c) => c.id), replaceExisting: mode === "replace" });
-    toast(`${r.added} cartes ajoutées${r.skipped ? `, ${r.skipped} doublons ignorés` : ""}.`, { tone: "success" });
-    onClose();
+    setBusy(true);
+    try {
+      const r = await saveImportedFlashcards({ chapterId: chapter.id, subjectName: subject.name, chapterName: chapter.name, cards: result.cards, sourceCourseIds: [], replaceExisting: mode === "replace" });
+      toast(`${r.added} cartes importées${r.skipped ? `, ${r.skipped} déjà présentes ignorées` : ""}.`, { tone: "success" });
+      onClose();
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <Modal
       open
-      onClose={phase === "running" ? () => {} : onClose}
-      title="Générer les flashcards"
+      onClose={onClose}
+      title="Importer des flashcards"
       wide
       footer={
-        phase === "select" ? (
-          <>
-            <Button onClick={onClose}>Annuler</Button>
-            <Button variant="primary" onClick={run} disabled={chosen.length === 0 || chars === 0 || !online} icon={<Sparkles className="h-4 w-4" aria-hidden />}>
-              Générer à partir de {chosen.length} cours
-            </Button>
-          </>
-        ) : phase === "review" ? (
-          <>
-            <Button onClick={() => setPhase("select")}>Retour</Button>
-            <Button variant="primary" onClick={save} disabled={!result || result.cards.length === 0}>
-              Enregistrer {result?.cards.length ?? 0} cartes
-            </Button>
-          </>
-        ) : null
+        <>
+          <Button onClick={onClose}>Annuler</Button>
+          <Button variant="primary" onClick={save} loading={busy} disabled={result.cards.length === 0}>
+            Importer {result.cards.length} carte{result.cards.length > 1 ? "s" : ""}
+          </Button>
+        </>
       }
     >
-      {phase === "select" && (
-        <div className="space-y-3">
-          <p className="text-sm">Générer à partir de :</p>
-          <ul className="space-y-1.5">
-            {courses.map((c) => {
-              const empty = !c.extractedText.trim();
-              return (
-                <li key={c.id}>
-                  <label className={cx("flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm", empty && "opacity-60")}>
-                    <input type="checkbox" className="h-4 w-4" checked={selected.has(c.id)} disabled={empty} onChange={(e) => {
-                      const next = new Set(selected);
-                      if (e.target.checked) next.add(c.id);
-                      else next.delete(c.id);
-                      setSelected(next);
-                    }} />
-                    <span className="min-w-0 flex-1 truncate">{c.title}</span>
-                    <span className="text-xs text-muted">{empty ? "aucun texte" : `${c.extractedText.length.toLocaleString("fr-FR")} car.`}</span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-          {existingCount > 0 && (
-            <Field label="Cartes existantes" htmlFor="gen-mode">
-              <Select id="gen-mode" value={mode} onChange={(e) => setMode(e.target.value as "add" | "replace")}>
-                <option value="add">Ajouter aux {existingCount} cartes existantes (doublons ignorés)</option>
-                <option value="replace">Remplacer les cartes générées par IA (les cartes manuelles sont gardées)</option>
-              </Select>
-            </Field>
-          )}
-          <InlineInfo>
-            Cette action enverra le contenu sélectionné ({chars.toLocaleString("fr-FR")} caractères{chars > 40_000 ? `, traité en ${Math.ceil(chars / 40_000)} lots` : ""}) au fournisseur IA configuré afin de générer les flashcards. Les cartes sont basées uniquement sur le contenu importé.
-          </InlineInfo>
-          {!online && <InlineError>Connexion Internet nécessaire pour cette fonctionnalité.</InlineError>}
-          {error && <InlineError>{error}</InlineError>}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <input ref={fileRef} type="file" accept=".json,.txt,.tsv,.csv,text/plain,application/json,text/csv,text/tab-separated-values" className="sr-only" onChange={(e) => e.target.files?.[0] && void onFile(e.target.files[0])} />
+          <Button size="sm" onClick={() => fileRef.current?.click()} icon={<Upload className="h-4 w-4" aria-hidden />}>
+            Choisir un fichier (.json, .txt, .tsv, .csv)
+          </Button>
+          <span className="text-xs text-muted">ou colle le contenu ci-dessous</span>
         </div>
-      )}
-      {phase === "running" && (
-        <div className="py-6 text-center">
-          <p className="font-medium">Génération en cours…</p>
-          <p className="mt-1 text-sm text-muted">{progress[1] > 1 ? `Lot ${Math.min(progress[0] + 1, progress[1])} / ${progress[1]}` : "Analyse intégrale du cours. Cela peut prendre une à deux minutes."}</p>
-        </div>
-      )}
-      {phase === "review" && result && (
-        <div className="space-y-3">
-          <p className="text-sm">
-            {result.cards.length} cartes générées{result.parts > 1 ? ` (${result.parts} lots fusionnés, doublons supprimés)` : ""}. Vérifie-les, puis enregistre. Tu pourras les modifier une par une avant l'export Anki.
+        <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={10} placeholder={'[{"front":"Question ?","back":"Réponse"}]\n\nou\n\nQuestion<TAB>Réponse\n\nou\n\nQ: Question ?\nR: Réponse'} aria-label="Contenu à importer" className="font-mono text-xs" />
+        {text.trim() && (
+          <p className={cx("text-sm", result.cards.length ? "text-success" : "text-danger")}>
+            Format détecté : {FORMAT_LABELS[result.format]} · {result.cards.length} carte{result.cards.length > 1 ? "s" : ""} lisible{result.cards.length > 1 ? "s" : ""}
+            {result.skipped > 0 && ` · ${result.skipped} ligne(s) ignorée(s)`}
+            {result.duplicatesRemoved > 0 && ` · ${result.duplicatesRemoved} doublon(s) retiré(s)`}
           </p>
-          {result.warnings.length > 0 && (
-            <Card className="p-3 text-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Remarques de l'IA</p>
-              <ul className="mt-1 list-disc pl-4">
-                {result.warnings.map((w, i) => (
-                  <li key={i}>{w}</li>
-                ))}
-              </ul>
-            </Card>
-          )}
-          <ul className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
-            {result.cards.map((c, i) => (
-              <li key={i} className="rounded-lg border border-border px-3 py-2 text-sm">
-                <p className="font-medium">{c.front}</p>
-                <p className="text-muted">{c.back}</p>
-                <button type="button" className="mt-1 text-xs text-danger underline" onClick={() => setResult({ ...result, cards: result.cards.filter((_, j) => j !== i) })}>
-                  Retirer
-                </button>
+        )}
+        {text.trim() && result.cards.length === 0 && <InlineError>Rien de lisible. Formats acceptés : JSON [{"{"}"front","back"{"}"}], TSV « question ⇥ réponse », CSV « question;réponse », ou blocs « Q: … / R: … ».</InlineError>}
+        {result.cards.length > 0 && (
+          <ul className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-border p-2 text-sm">
+            {result.cards.slice(0, 50).map((c, i) => (
+              <li key={i} className="rounded bg-surface-2 px-2 py-1">
+                <span className="font-medium">{c.front}</span> <span className="text-muted">— {c.back}</span>
               </li>
             ))}
+            {result.cards.length > 50 && <li className="px-2 text-xs text-muted">… et {result.cards.length - 50} autres</li>}
           </ul>
-          <p className="text-xs text-muted">Généré le {formatDateTime(new Date().toISOString())}.</p>
-        </div>
-      )}
+        )}
+        {existingCount > 0 && (
+          <Field label="Cartes existantes" htmlFor="import-mode">
+            <Select id="import-mode" value={mode} onChange={(e) => setMode(e.target.value as "add" | "replace")}>
+              <option value="add">Ajouter aux {existingCount} cartes existantes (questions déjà présentes ignorées)</option>
+              <option value="replace">Remplacer les cartes importées (les cartes ajoutées à la main sont gardées)</option>
+            </Select>
+          </Field>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function PromptDialog({ chapter, subject, courses, onClose }: { chapter: Chapter; subject: Subject; courses: Course[]; onClose: () => void }) {
+  const toast = useToast();
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(courses.filter((c) => c.extractedText.trim()).map((c) => c.id)));
+  const chosen = courses.filter((c) => selected.has(c.id));
+  const prompt = useMemo(
+    () => buildGenerationPrompt({ subjectName: subject.name, chapterName: chapter.name, courseText: chosen.map((c) => `### ${c.title}\n${c.extractedText.trim()}`).join("\n\n") }),
+    [subject.name, chapter.name, chosen],
+  );
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      toast("Prompt copié. Colle-le dans ChatGPT, Claude ou Gemini, puis importe la réponse JSON.", { tone: "success", durationMs: 6000 });
+    } catch {
+      toast("Copie impossible : sélectionne le texte ci-dessous et copie-le manuellement.", { tone: "danger" });
+    }
+  };
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Prompt de génération (à coller dans un chat IA)"
+      wide
+      footer={
+        <>
+          <Button onClick={onClose}>Fermer</Button>
+          <Button variant="primary" onClick={copy} disabled={chosen.length === 0} icon={<ClipboardCopy className="h-4 w-4" aria-hidden />}>
+            Copier le prompt
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-sm">Cours à inclure :</p>
+        <ul className="space-y-1.5">
+          {courses.map((c) => {
+            const empty = !c.extractedText.trim();
+            return (
+              <li key={c.id}>
+                <label className={cx("flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm", empty && "opacity-60")}>
+                  <input type="checkbox" className="h-4 w-4" checked={selected.has(c.id)} disabled={empty} onChange={(e) => {
+                    const next = new Set(selected);
+                    if (e.target.checked) next.add(c.id);
+                    else next.delete(c.id);
+                    setSelected(next);
+                  }} />
+                  <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                  <span className="text-xs text-muted">{empty ? "aucun texte" : `${c.extractedText.length.toLocaleString("fr-FR")} car.`}</span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+        <InlineInfo>Le prompt demande des cartes exhaustives, réponses courtes, basées uniquement sur le cours, au format JSON prêt à importer. Rien n'est envoyé par l'application : c'est toi qui colles le texte dans le chat IA de ton choix.</InlineInfo>
+        <Textarea value={prompt} readOnly rows={10} className="font-mono text-xs" aria-label="Prompt" onFocus={(e) => e.currentTarget.select()} />
+        <p className="text-xs text-muted">{prompt.length.toLocaleString("fr-FR")} caractères. Si le cours est très long, copie-le en plusieurs fois (un chapitre par prompt) et importe chaque réponse : les doublons sont ignorés.</p>
+      </div>
     </Modal>
   );
 }

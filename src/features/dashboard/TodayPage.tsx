@@ -20,7 +20,13 @@ export function TodayPage({ today }: { today: DateKey }) {
 
   const data = useLiveQuery(async () => {
     const [todayTasks, extra, upcomingExams, pastExams, results] = await Promise.all([
-      db.tasks.where("scheduledDate").equals(today).and((t) => t.taskType !== "EXTRA_WORK" && t.status !== "CANCELLED").toArray(),
+      db.tasks
+        .where("scheduledDate")
+        .equals(today)
+        .or("visibleFrom")
+        .belowOrEqual(today)
+        .and((t) => t.taskType !== "EXTRA_WORK" && t.status !== "CANCELLED" && (t.scheduledDate === today || (t.visibleFrom !== null && t.scheduledDate >= today && t.status === "UPCOMING")))
+        .toArray(),
       db.tasks.where("[taskType+status]").equals(["EXTRA_WORK", "PENDING"]).toArray(),
       db.exams.where("date").between(today, addDays(today, 60), true, true).toArray(),
       db.exams.where("date").below(today).toArray(),

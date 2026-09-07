@@ -9,7 +9,7 @@ import { useToast } from "@/components/ui/toast";
 import { db } from "@/db/db";
 import { COURSE_TYPE_LABELS, FRENCH_TYPE_LABELS } from "@/domain/labels";
 import { getStrategy } from "@/domain/revision";
-import type { Course, Exam, ExamResult } from "@/domain/types";
+import type { Course, Exam, ExamResult, Task } from "@/domain/types";
 import { AddCourseDialog } from "@/features/courses/AddCourseDialog";
 import { ExamDialog } from "@/features/exams/ExamDialog";
 import { ResourceList } from "@/features/resources/ResourceList";
@@ -86,8 +86,9 @@ export function ChapterPage({ id, today }: { id: string; today: DateKey }) {
 
       <section>
         <SectionTitle>Planning</SectionTitle>
-        {!chapter.startedAt && strategy.chapterSchedule.length > 0 && <p className="mb-2 text-sm text-muted">Le planning J0 → J14 sera créé à l'ajout du premier cours.</p>}
-        {strategy.chapterSchedule.length === 0 && <p className="mb-2 text-sm text-muted">{strategy.label} : pas de J0/J1/J3/J7/J14 automatique. Les tâches sont générées à partir des contrôles.</p>}
+        {subject.scheduleEnabled === false && <p className="mb-2 text-sm text-muted">Programme automatique désactivé pour {subject.name} : aucune tâche n'est générée (modifiable sur la page de la matière).</p>}
+        {subject.scheduleEnabled !== false && !chapter.startedAt && strategy.chapterSchedule.length > 0 && <p className="mb-2 text-sm text-muted">Le planning J0 → J14 sera créé à l'ajout du premier cours.</p>}
+        {subject.scheduleEnabled !== false && strategy.chapterSchedule.length === 0 && <p className="mb-2 text-sm text-muted">{strategy.label} : pas de J0/J1/J3/J7/J14 automatique. Les tâches sont générées à partir des contrôles.</p>}
         {chapterTasks.length > 0 && <TaskTable tasks={chapterTasks} today={today} />}
         {exams.map((exam) => {
           const examTasks = tasks.filter((t) => t.examId === exam.id && t.taskType === "EXAM");
@@ -279,7 +280,7 @@ function PageHead({ chapterName, subjectName, subjectId, startedAt, onRename, on
   );
 }
 
-function TaskTable({ tasks, today }: { tasks: { id: string; revisionType: import("@/domain/types").RevisionType; scheduledDate: DateKey; status: import("@/domain/types").TaskStatus; title: string; lateCompletedAt: string | null }[]; today: DateKey }) {
+function TaskTable({ tasks, today }: { tasks: Pick<Task, "id" | "revisionType" | "scheduledDate" | "visibleFrom" | "status" | "title" | "lateCompletedAt">[]; today: DateKey }) {
   return (
     <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
       {tasks.map((t) => (

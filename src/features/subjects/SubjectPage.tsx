@@ -4,7 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { ArrowLeft, BookOpen, Plus } from "lucide-react";
 import { useState } from "react";
 import { RevisionBadge, StatusBadge, displayStatus } from "@/components/domain/badges";
-import { Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { db } from "@/db/db";
 import { STRATEGY_LABELS } from "@/domain/labels";
 import { getStrategy } from "@/domain/revision";
@@ -12,6 +12,7 @@ import type { Chapter, Exam, Task } from "@/domain/types";
 import { AddChapterDialog } from "@/features/chapters/AddChapterDialog";
 import { compareKeys, formatDateDayMonth, formatDateShort, type DateKey } from "@/lib/dates";
 import { Link, paths } from "@/lib/router";
+import { updateSubject } from "@/services/structure";
 
 export function SubjectPage({ id, today }: { id: string; today: DateKey }) {
   const [adding, setAdding] = useState(false);
@@ -53,6 +54,16 @@ export function SubjectPage({ id, today }: { id: string; today: DateKey }) {
         }
       />
 
+      <Card className="mb-5 flex flex-wrap items-center justify-between gap-3 p-3.5">
+        <div className="text-sm">
+          <span className="font-medium">Programme automatique : </span>
+          <Badge tone={subject.scheduleEnabled === false ? "neutral" : "success"}>{subject.scheduleEnabled === false ? "désactivé" : "activé"}</Badge>
+          <p className="mt-1 text-xs text-muted">{subject.scheduleEnabled === false ? "Aucune tâche automatique pour cette matière. Les contrôles restent suivis." : "Le premier cours d'un chapitre déclenche J0 ; les contrôles créent J-3 / J-2 / J-1 / jour J."}</p>
+        </div>
+        <Button size="sm" onClick={() => updateSubject(subject.id, { scheduleEnabled: subject.scheduleEnabled === false })}>
+          {subject.scheduleEnabled === false ? "Activer le programme" : "Désactiver le programme"}
+        </Button>
+      </Card>
       {subject.writingTips && (
         <Card className="mb-5 p-3.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Conseils de rédaction</p>

@@ -22,6 +22,11 @@ export interface Subject {
   order: number;
   /** Personal writing tips shown on the subject page (SVT, HG, Français...). */
   writingTips: string;
+  /**
+   * When false, no automatic task is generated for this subject (no J0..J14, no J-3..jour J).
+   * Exams are still tracked. Missing (old backups) means true.
+   */
+  scheduleEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -121,7 +126,13 @@ export interface Task {
   taskType: TaskType;
   title: string;
   description: string;
+  /** Deadline: the task must be done before the end of this local day. */
   scheduledDate: DateKey;
+  /**
+   * First day the task is shown in "Aujourd'hui" when it differs from the deadline
+   * (weekend rule: a J1 falling on Saturday is shown Saturday, due Sunday midnight).
+   */
+  visibleFrom: DateKey | null;
   estimatedMinutes: number | null;
   durationIsEstimate: boolean;
   status: TaskStatus;
@@ -162,7 +173,8 @@ export interface Flashcard {
   back: string;
   tags: string[];
   sourceCourseIds: Id[];
-  origin: "AI" | "MANUAL";
+  /** IMPORT = imported from a file/paste (AI kept for data created by earlier versions). */
+  origin: "IMPORT" | "MANUAL" | "AI";
   createdAt: string;
   updatedAt: string;
 }

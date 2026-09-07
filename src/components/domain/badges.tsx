@@ -29,8 +29,8 @@ export function RevisionBadge({ type, className }: { type: RevisionType; classNa
 
 export type DisplayStatus = TaskStatus | "TODAY";
 
-export function displayStatus(task: Pick<Task, "status" | "scheduledDate">, today: DateKey): DisplayStatus {
-  if (task.status === "UPCOMING" && task.scheduledDate === today) return "TODAY";
+export function displayStatus(task: Pick<Task, "status" | "scheduledDate" | "visibleFrom">, today: DateKey): DisplayStatus {
+  if (task.status === "UPCOMING" && (task.scheduledDate === today || (task.visibleFrom !== null && task.visibleFrom <= today && today <= task.scheduledDate))) return "TODAY";
   return task.status;
 }
 

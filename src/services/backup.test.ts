@@ -43,7 +43,7 @@ describe("Backup / restore (Test §91)", () => {
     expect(parsed.summary.courses).toBe(2);
     expect(parsed.summary.exams).toBe(1);
     expect(parsed.summary.completedTasks).toBe(1);
-    expect(parsed.summary.missedTasks).toBe(1);
+    expect(parsed.summary.missedTasks).toBe(2); // J1 maths + J0 « Devoir Latin »
 
     await restoreBackup(parsed);
     const after = await buildBackupDocument(false);

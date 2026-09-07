@@ -104,14 +104,14 @@ export async function syncNotificationPlan(): Promise<NotificationPlan> {
   const today = todayKey();
   const end = addDays(today, 7);
   const [tasks, subjects, chapters] = await Promise.all([
-    db.tasks.where("scheduledDate").between(today, end, true, true).and((t) => t.status === "UPCOMING").toArray(),
+    db.tasks.where("scheduledDate").between(today, addDays(end, 1), true, true).and((t) => t.status === "UPCOMING").toArray(),
     db.subjects.toArray(),
     db.chapters.toArray(),
   ]);
   const days: Record<DateKey, DayPlan> = {};
   for (let i = 0; i <= 7; i++) {
     const day = addDays(today, i);
-    const dayTasks = tasks.filter((t) => t.scheduledDate === day);
+    const dayTasks = tasks.filter((t) => t.scheduledDate === day || (t.visibleFrom !== null && t.visibleFrom === day));
     const lines = dayTasks.length ? buildProgramLines(dayTasks, subjects, chapters) : ["Aucune tâche prévue aujourd'hui."];
     days[day] = { title: NOTIFICATION_TITLE, body: lines.join("\n"), count: dayTasks.length };
   }

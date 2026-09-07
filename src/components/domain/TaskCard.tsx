@@ -6,7 +6,7 @@ import { RevisionBadge, StatusBadge, displayStatus } from "@/components/domain/b
 import { Button, cx } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import type { Chapter, Subject, Task } from "@/domain/types";
-import { formatDateShort, formatMinutes, type DateKey } from "@/lib/dates";
+import { formatDateFull, formatDateShort, formatMinutes, type DateKey } from "@/lib/dates";
 import { Link, paths } from "@/lib/router";
 import { completeTask, uncompleteTask } from "@/services/scheduling";
 
@@ -71,6 +71,9 @@ export function TaskCard({ task, subject, chapter, today, showDate, compact }: P
           </div>
           <h3 className={cx("mt-2 font-medium leading-snug", done && "line-through decoration-muted")}>{task.title}</h3>
           {!compact && task.description && <p className="mt-1 text-sm text-muted line-clamp-3">{task.description}</p>}
+          {task.visibleFrom && task.scheduledDate > today && task.status === "UPCOMING" && (
+            <p className="mt-1.5 text-xs font-medium text-warning">À faire avant {formatDateFull(task.scheduledDate).toLowerCase()} minuit (J1 tombé un samedi : week-end complet).</p>
+          )}
           <p className="mt-1.5 text-xs text-muted">
             {task.estimatedMinutes !== null
               ? `Durée${task.durationIsEstimate ? " estimée" : ""} : ${formatMinutes(task.estimatedMinutes)}`

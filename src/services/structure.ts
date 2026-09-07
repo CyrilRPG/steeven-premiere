@@ -66,6 +66,7 @@ export async function addSubject(name: string, folderId: Id | null, strategyType
     strategyType,
     order: count,
     writingTips: "",
+    scheduleEnabled: true,
     createdAt: now,
     updatedAt: now,
   };
@@ -73,7 +74,7 @@ export async function addSubject(name: string, folderId: Id | null, strategyType
   return subject;
 }
 
-export async function updateSubject(id: Id, patch: Partial<Pick<Subject, "name" | "folderId" | "strategyType" | "writingTips">>): Promise<void> {
+export async function updateSubject(id: Id, patch: Partial<Pick<Subject, "name" | "folderId" | "strategyType" | "writingTips" | "scheduleEnabled">>): Promise<void> {
   const clean = { ...patch };
   if (clean.name !== undefined) clean.name = clean.name.trim() || "Matière";
   await db.subjects.update(id, { ...clean, updatedAt: nowIso() });

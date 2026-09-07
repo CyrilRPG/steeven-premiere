@@ -4,6 +4,9 @@
  * Rules implemented here:
  *  - J0 is the day the FIRST course of a chapter is added. Later courses never change it.
  *  - Chapter tasks: J0, J1, J3, J7, J14 (per strategy). Exam tasks: J-3, J-2, J-1, exam day.
+ *  - Weekend rule: when J1 falls on a Saturday, the whole chapter schedule shifts by one day
+ *    (J1 becomes Sunday). The J1 task is still shown on Saturday (visibleFrom) but its
+ *    deadline is Sunday midnight.
  *  - Tasks are only generated for dates >= today: a task in the past could never have been done.
  *  - COMPLETED / MISSED tasks are historical and never modified by the engine.
  *  - When an exam date changes, its UPCOMING tasks are replaced; history is kept.
@@ -12,7 +15,7 @@
  *  - At each app start, UPCOMING normal tasks dated before today become MISSED (idempotent).
  *  - Extra work (objective not reached) = 1 h PENDING task that never expires.
  */
-import { addDays, compareKeys, type DateKey } from "@/lib/dates";
+import { addDays, compareKeys, parseKey, type DateKey } from "@/lib/dates";
 import { newId } from "@/lib/ids";
 import { REVISION_ORDER } from "@/domain/labels";
 import { fill, type RevisionStrategy, type TaskTemplate, type TemplateContext } from "@/domain/revision/strategy";
@@ -21,10 +24,26 @@ import type { Chapter, Exam, FrenchExamType, Id, RevisionType, Subject, Task } f
 export interface DatedRevision {
   revisionType: RevisionType;
   date: DateKey;
+  /** Earlier display date when it differs from the deadline (weekend rule). */
+  visibleFrom: DateKey | null;
+}
+
+/** 1 when J0 + 1 is a Saturday (JS getDay() === 6), else 0. */
+export function weekendShift(j0: DateKey): number {
+  return parseKey(addDays(j0, 1)).getDay() === 6 ? 1 : 0;
+}
+
+function chapterDate(j0: DateKey, template: TaskTemplate, shift: number): { date: DateKey; visibleFrom: DateKey | null } {
+  const offset = template.offsetDays;
+  if (offset < 1 || shift === 0) return { date: addDays(j0, offset), visibleFrom: null };
+  const date = addDays(j0, offset + shift);
+  const visibleFrom = template.revisionType === "J1" ? addDays(j0, offset) : null;
+  return { date, visibleFrom };
 }
 
 export function calculateRevisionDates(j0: DateKey, strategy: RevisionStrategy): DatedRevision[] {
-  return strategy.chapterSchedule.map((t) => ({ revisionType: t.revisionType, date: addDays(j0, t.offsetDays) }));
+  const shift = weekendShift(j0);
+  return strategy.chapterSchedule.map((t) => ({ revisionType: t.revisionType, ...chapterDate(j0, t, shift) }));
 }
 
 export function calculateExamDates(
@@ -34,12 +53,13 @@ export function calculateExamDates(
 ): DatedRevision[] {
   return strategy
     .examSchedule({ frenchType })
-    .map((t) => ({ revisionType: t.revisionType, date: addDays(examDate, t.offsetDays) }));
+    .map((t) => ({ revisionType: t.revisionType, date: addDays(examDate, t.offsetDays), visibleFrom: null }));
 }
 
 interface BuildParams {
   template: TaskTemplate;
   date: DateKey;
+  visibleFrom?: DateKey | null;
   chapter: Chapter;
   subject: Subject;
   examId: Id | null;
@@ -47,7 +67,7 @@ interface BuildParams {
   now: string;
 }
 
-function buildTask({ template, date, chapter, subject, examId, taskType, now }: BuildParams): Task {
+function buildTask({ template, date, visibleFrom = null, chapter, subject, examId, taskType, now }: BuildParams): Task {
   const ctx: TemplateContext = { chapterName: chapter.name, subjectName: subject.name };
   return {
     id: newId(),
@@ -59,6 +79,7 @@ function buildTask({ template, date, chapter, subject, examId, taskType, now }: 
     title: fill(template.title, ctx),
     description: fill(template.description, ctx),
     scheduledDate: date,
+    visibleFrom,
     estimatedMinutes: template.estimatedMinutes,
     durationIsEstimate: template.durationIsEstimate,
     status: "UPCOMING",
@@ -88,10 +109,11 @@ export interface ChapterGenerationInput {
 /** Tasks for a chapter that just started (J0 = first course). Past dates are skipped. */
 export function generateChapterTasks({ chapter, subject, strategy, j0, today, now }: ChapterGenerationInput): Task[] {
   const tasks: Task[] = [];
+  const shift = weekendShift(j0);
   for (const template of strategy.chapterSchedule) {
-    const date = addDays(j0, template.offsetDays);
+    const { date, visibleFrom } = chapterDate(j0, template, shift);
     if (compareKeys(date, today) < 0) continue;
-    tasks.push({ ...buildTask({ template, date, chapter, subject, examId: null, taskType: "CHAPTER", now }) });
+    tasks.push(buildTask({ template, date, visibleFrom, chapter, subject, examId: null, taskType: "CHAPTER", now }));
   }
   return tasks;
 }
@@ -197,6 +219,7 @@ export function createExtraWorkTask(exam: Exam, chapter: Chapter, subject: Subje
     title: `${subject.name} — Travail supplémentaire`,
     description: `Objectif non atteint au contrôle « ${exam.name} » (${chapter.name}). Faire 1 h de travail supplémentaire dans la matière.`,
     scheduledDate: today,
+    visibleFrom: null,
     estimatedMinutes: EXTRA_WORK_MINUTES,
     durationIsEstimate: false,
     status: "PENDING",

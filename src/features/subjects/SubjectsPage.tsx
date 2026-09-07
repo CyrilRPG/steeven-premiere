@@ -60,6 +60,7 @@ export function SubjectsPage() {
                     <span className="block truncate font-medium">{s.name}</span>
                     <span className="block text-xs text-muted">
                       {tree.chapterCounts.get(s.id) ?? 0} chapitre{(tree.chapterCounts.get(s.id) ?? 0) > 1 ? "s" : ""} · {STRATEGY_LABELS[s.strategyType]}
+                      {s.scheduleEnabled === false && " · programme désactivé"}
                     </span>
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden />
@@ -231,6 +232,7 @@ function SubjectDialog({ open, onClose, subject, folderId, folders, onDelete }: 
   const [folder, setFolder] = useState<string>(folderId ?? "");
   const [strategy, setStrategy] = useState<StrategyType>(subject?.strategyType ?? "NONE");
   const [tips, setTips] = useState(subject?.writingTips ?? "");
+  const [scheduleEnabled, setScheduleEnabled] = useState(subject ? subject.scheduleEnabled !== false : true);
   const [busy, setBusy] = useState(false);
   const options = useMemo(() => folderOptions(folders), [folders]);
   const submit = async (e: FormEvent) => {
@@ -238,10 +240,10 @@ function SubjectDialog({ open, onClose, subject, folderId, folders, onDelete }: 
     if (!name.trim()) return;
     setBusy(true);
     try {
-      if (subject) await updateSubject(subject.id, { name, folderId: folder || null, strategyType: strategy, writingTips: tips });
+      if (subject) await updateSubject(subject.id, { name, folderId: folder || null, strategyType: strategy, writingTips: tips, scheduleEnabled });
       else {
         const created = await addSubject(name, folder || null, strategy);
-        if (tips.trim()) await updateSubject(created.id, { writingTips: tips });
+        if (tips.trim() || !scheduleEnabled) await updateSubject(created.id, { writingTips: tips, scheduleEnabled });
       }
       onClose();
     } finally {
@@ -290,6 +292,13 @@ function SubjectDialog({ open, onClose, subject, folderId, folders, onDelete }: 
             ))}
           </Select>
         </Field>
+        <label className="flex items-start gap-3 rounded-lg border border-border px-3 py-2.5">
+          <input type="checkbox" className="mt-0.5 h-5 w-5" checked={scheduleEnabled} onChange={(e) => setScheduleEnabled(e.target.checked)} />
+          <span className="text-sm">
+            <span className="block font-medium">Appliquer le programme automatique</span>
+            <span className="block text-xs text-muted">Décoché : aucune tâche J0…J14 ni J-3…jour J n'est créée pour cette matière. Les contrôles restent suivis (résultat Oui/Non). Les chapitres déjà démarrés ne sont pas recalculés.</span>
+          </span>
+        </label>
         <Field label="Conseils de rédaction (facultatif)" htmlFor="subject-tips">
           <Input id="subject-tips" value={tips} onChange={(e) => setTips(e.target.value)} placeholder="Affichés sur la page de la matière" />
         </Field>

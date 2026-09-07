@@ -54,11 +54,11 @@ describe("Test 1 — chapter J dates", () => {
   it("J0 = 1 septembre gives J1 02/09, J3 04/09, J7 08/09, J14 15/09", () => {
     const dates = calculateRevisionDates("2026-09-01", getStrategy("MATHEMATICS"));
     expect(dates).toEqual([
-      { revisionType: "J0", date: "2026-09-01" },
-      { revisionType: "J1", date: "2026-09-02" },
-      { revisionType: "J3", date: "2026-09-04" },
-      { revisionType: "J7", date: "2026-09-08" },
-      { revisionType: "J14", date: "2026-09-15" },
+      { revisionType: "J0", date: "2026-09-01", visibleFrom: null },
+      { revisionType: "J1", date: "2026-09-02", visibleFrom: null },
+      { revisionType: "J3", date: "2026-09-04", visibleFrom: null },
+      { revisionType: "J7", date: "2026-09-08", visibleFrom: null },
+      { revisionType: "J14", date: "2026-09-15", visibleFrom: null },
     ]);
   });
 
@@ -98,8 +98,16 @@ describe("Test 1 — chapter J dates", () => {
     expect(tasks.map((t) => t.revisionType)).toEqual(["J7", "J14"]);
   });
 
-  it("OSEF and FRENCH subjects generate no chapter tasks", () => {
-    for (const type of ["OSEF", "FRENCH", "NONE"] as const) {
+  it("OSEF subjects get a single J0 « Devoir + matière » task", () => {
+    const s = subject("OSEF", "Anglais");
+    const tasks = generateChapterTasks({ chapter: chapter(s.id, "2026-09-01"), subject: s, strategy: getStrategy("OSEF"), j0: "2026-09-01", today: "2026-09-01", now: NOW });
+    expect(tasks.map((t) => [t.revisionType, t.scheduledDate])).toEqual([["J0", "2026-09-01"]]);
+    expect(tasks[0].title).toBe("Devoir Anglais");
+    expect(tasks[0].description).toContain("Dérivation");
+  });
+
+  it("FRENCH and custom subjects generate no chapter tasks", () => {
+    for (const type of ["FRENCH", "NONE"] as const) {
       const s = subject(type);
       const tasks = generateChapterTasks({
         chapter: chapter(s.id, "2026-09-01"),
@@ -114,27 +122,55 @@ describe("Test 1 — chapter J dates", () => {
   });
 });
 
+describe("Weekend rule — J1 on a Saturday", () => {
+  it("shifts the whole schedule by one day and shows J1 from Saturday with a Sunday deadline", () => {
+    // 2026-09-04 is a Friday, so J1 would be Saturday 05/09.
+    const dates = calculateRevisionDates("2026-09-04", getStrategy("MATHEMATICS"));
+    expect(dates).toEqual([
+      { revisionType: "J0", date: "2026-09-04", visibleFrom: null },
+      { revisionType: "J1", date: "2026-09-06", visibleFrom: "2026-09-05" },
+      { revisionType: "J3", date: "2026-09-08", visibleFrom: null },
+      { revisionType: "J7", date: "2026-09-12", visibleFrom: null },
+      { revisionType: "J14", date: "2026-09-19", visibleFrom: null },
+    ]);
+    const s = subject("MATHEMATICS");
+    const tasks = generateChapterTasks({ chapter: chapter(s.id, "2026-09-04"), subject: s, strategy: getStrategy("MATHEMATICS"), j0: "2026-09-04", today: "2026-09-04", now: NOW });
+    const j1 = tasks.find((t) => t.revisionType === "J1")!;
+    expect(j1.scheduledDate).toBe("2026-09-06");
+    expect(j1.visibleFrom).toBe("2026-09-05");
+    // Not missed on Sunday morning, missed on Monday.
+    expect(markExpiredTasksAsMissed([j1], "2026-09-06", NOW)).toEqual([]);
+    expect(markExpiredTasksAsMissed([j1], "2026-09-07", NOW)).toHaveLength(1);
+  });
+
+  it("does not shift when J1 is a Sunday or a weekday", () => {
+    // 2026-09-05 is a Saturday: J1 Sunday, no shift.
+    expect(calculateRevisionDates("2026-09-05", getStrategy("MATHEMATICS")).map((d) => d.date)).toEqual(["2026-09-05", "2026-09-06", "2026-09-08", "2026-09-12", "2026-09-19"]);
+    expect(calculateRevisionDates("2026-09-01", getStrategy("MATHEMATICS")).every((d) => d.visibleFrom === null)).toBe(true);
+  });
+});
+
 describe("Test 2 — exam dates", () => {
   it("contrôle 20 septembre gives J-2 18/09, J-1 19/09 for maths (no J-3, no exam day)", () => {
     expect(calculateExamDates("2026-09-20", getStrategy("MATHEMATICS"))).toEqual([
-      { revisionType: "J_MINUS_2", date: "2026-09-18" },
-      { revisionType: "J_MINUS_1", date: "2026-09-19" },
+      { revisionType: "J_MINUS_2", date: "2026-09-18", visibleFrom: null },
+      { revisionType: "J_MINUS_1", date: "2026-09-19", visibleFrom: null },
     ]);
   });
 
   it("physics gives J-2, J-1 and exam day", () => {
     expect(calculateExamDates("2026-09-20", getStrategy("PHYSICS"))).toEqual([
-      { revisionType: "J_MINUS_2", date: "2026-09-18" },
-      { revisionType: "J_MINUS_1", date: "2026-09-19" },
-      { revisionType: "EXAM_DAY", date: "2026-09-20" },
+      { revisionType: "J_MINUS_2", date: "2026-09-18", visibleFrom: null },
+      { revisionType: "J_MINUS_1", date: "2026-09-19", visibleFrom: null },
+      { revisionType: "EXAM_DAY", date: "2026-09-20", visibleFrom: null },
     ]);
   });
 
   it("french book exam gives J-3 17/09, J-2 18/09, J-1 19/09", () => {
     expect(calculateExamDates("2026-09-20", getStrategy("FRENCH"), "BOOK")).toEqual([
-      { revisionType: "J_MINUS_3", date: "2026-09-17" },
-      { revisionType: "J_MINUS_2", date: "2026-09-18" },
-      { revisionType: "J_MINUS_1", date: "2026-09-19" },
+      { revisionType: "J_MINUS_3", date: "2026-09-17", visibleFrom: null },
+      { revisionType: "J_MINUS_2", date: "2026-09-18", visibleFrom: null },
+      { revisionType: "J_MINUS_1", date: "2026-09-19", visibleFrom: null },
     ]);
     const s = subject("FRENCH", "Français");
     const c = chapter(s.id, "2026-09-01");

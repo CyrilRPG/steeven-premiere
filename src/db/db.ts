@@ -52,10 +52,35 @@ export class SteevenDatabase extends Dexie {
       settings: "id",
       meta: "key",
     });
+    // v2: weekend rule (visibleFrom) + per-subject automatic schedule toggle.
+    this.version(2)
+      .stores({
+      folders: "id, parentId, order",
+      subjects: "id, folderId, order",
+      chapters: "id, subjectId, startedAt",
+      courses: "id, chapterId, fingerprint",
+      files: "id, courseId",
+      exams: "id, chapterId, subjectId, date",
+      tasks: "id, chapterId, subjectId, examId, scheduledDate, visibleFrom, status, taskType, [status+scheduledDate], [taskType+status]",
+      resources: "id, chapterId",
+      flashcards: "id, chapterId",
+      examResults: "id, examId, subjectId, chapterId",
+      ankiExports: "id, chapterId, exportedAt",
+      settings: "id",
+      meta: "key",
+    })
+      .upgrade(async (tx) => {
+        await tx.table("tasks").toCollection().modify((t: { visibleFrom?: string | null }) => {
+          if (t.visibleFrom === undefined) t.visibleFrom = null;
+        });
+        await tx.table("subjects").toCollection().modify((s: { scheduleEnabled?: boolean }) => {
+          if (s.scheduleEnabled === undefined) s.scheduleEnabled = true;
+        });
+      });
   }
 }
 
-export const DB_SCHEMA_VERSION = 1;
+export const DB_SCHEMA_VERSION = 2;
 
 export const db = new SteevenDatabase();
 

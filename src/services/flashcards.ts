@@ -2,25 +2,24 @@ import { db } from "@/db/db";
 import type { AnkiExport, Flashcard, Id } from "@/domain/types";
 import { newId, nowIso } from "@/lib/ids";
 import { ankiFileName, buildAnkiTsv, buildHierarchicalTag } from "@/services/anki";
-import type { GeneratedCard } from "@/services/ai/provider";
-import { normalizeCardKey } from "@/services/ai/provider";
+import { normalizeCardKey, type ImportedCard } from "@/services/flashcards-import";
 import { todayKey } from "@/lib/dates";
 
-export interface SaveGeneratedInput {
+export interface SaveImportedInput {
   chapterId: Id;
   subjectName: string;
   chapterName: string;
-  cards: GeneratedCard[];
+  cards: ImportedCard[];
   sourceCourseIds: Id[];
-  /** When true, existing AI cards of the chapter are replaced. */
+  /** When true, existing imported cards of the chapter are replaced (manual cards are kept). */
   replaceExisting: boolean;
 }
 
-/** Saves generated cards, skipping questions already present in the chapter. */
-export async function saveGeneratedFlashcards(input: SaveGeneratedInput): Promise<{ added: number; skipped: number }> {
+/** Saves imported cards, skipping questions already present in the chapter. */
+export async function saveImportedFlashcards(input: SaveImportedInput): Promise<{ added: number; skipped: number }> {
   return db.transaction("rw", db.flashcards, async () => {
     if (input.replaceExisting) {
-      await db.flashcards.where("chapterId").equals(input.chapterId).and((f) => f.origin === "AI").delete();
+      await db.flashcards.where("chapterId").equals(input.chapterId).and((f) => f.origin !== "MANUAL").delete();
     }
     const existing = await db.flashcards.where("chapterId").equals(input.chapterId).toArray();
     const seen = new Set(existing.map((f) => normalizeCardKey(f.front)));
@@ -40,9 +39,9 @@ export async function saveGeneratedFlashcards(input: SaveGeneratedInput): Promis
         chapterId: input.chapterId,
         front: card.front.trim(),
         back: card.back.trim(),
-        tags: [tag],
+        tags: card.tags && card.tags.length ? Array.from(new Set([tag, ...card.tags])) : [tag],
         sourceCourseIds: input.sourceCourseIds,
-        origin: "AI",
+        origin: "IMPORT",
         createdAt: now,
         updatedAt: now,
       });

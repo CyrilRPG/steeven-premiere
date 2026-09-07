@@ -2,15 +2,24 @@ import { OFFSETS, type RevisionStrategy } from "@/domain/revision/strategy";
 
 /**
  * Histoire-Géo-EMC, Enseignement scientifique, Anglais, Espagnol.
- * No J0/J1/J3/J7/J14: the method only depends on the exam date.
+ * Only a J0 "Devoir" task when the first course arrives; the rest depends on the exam date.
  */
 export const osefStrategy: RevisionStrategy = {
   type: "OSEF",
   label: "Osef (flashcards avant le contrôle)",
-  description: "Pas de J0/J1/J3/J7/J14. Flashcards exhaustives à J-2, réapprentissage à J-1 et le jour J.",
+  description: "J0 : faire le devoir de la matière. Puis flashcards exhaustives à J-2, réapprentissage à J-1 et le jour J.",
   requiresExamType: false,
   resourcePreferences: [],
-  chapterSchedule: [],
+  chapterSchedule: [
+    {
+      revisionType: "J0",
+      offsetDays: OFFSETS.J0,
+      title: "Devoir {subject}",
+      description: "Faire le devoir de {subject} donné avec le cours « {chapter} » (exercices, lecture, préparation demandée).",
+      estimatedMinutes: null,
+      durationIsEstimate: true,
+    },
+  ],
   examSchedule: () => [
     {
       revisionType: "J_MINUS_2",

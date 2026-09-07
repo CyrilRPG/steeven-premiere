@@ -65,6 +65,7 @@ export function TaskPage({ id, today }: { id: string; today: DateKey }) {
             <dt className="text-xs text-muted">Date</dt>
             <dd className="font-medium">{formatDateLong(task.scheduledDate)}</dd>
             {task.originalScheduledDate && <dd className="text-xs text-muted">Déplacée manuellement (initialement {formatDateLong(task.originalScheduledDate)})</dd>}
+            {task.visibleFrom && <dd className="text-xs text-warning">Affichée dès le {formatDateLong(task.visibleFrom)} · à faire avant le {formatDateLong(task.scheduledDate)} minuit</dd>}
           </div>
           <div>
             <dt className="text-xs text-muted">Durée</dt>

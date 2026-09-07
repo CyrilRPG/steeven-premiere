@@ -78,6 +78,7 @@ export async function ensureInitialized(): Promise<void> {
           strategyType: s.strategyType,
           order: subjectOrder++,
           writingTips: s.writingTips ?? "",
+          scheduleEnabled: true,
           createdAt: now,
           updatedAt: now,
         });

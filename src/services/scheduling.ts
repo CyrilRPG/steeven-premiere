@@ -12,11 +12,16 @@ import {
   markExpiredTasksAsMissed,
   reconcileExamTasks,
 } from "@/domain/scheduling/engine";
-import type { Exam, ExamResult, FrenchExamType, Id, Task } from "@/domain/types";
+import type { Exam, ExamResult, FrenchExamType, Id, Subject, Task } from "@/domain/types";
 import { todayKey, type DateKey } from "@/lib/dates";
 import { newId, nowIso } from "@/lib/ids";
 
 const SCHEDULING_TABLES = [db.chapters, db.subjects, db.exams, db.tasks, db.examResults, db.meta];
+
+/** Old backups may not carry the flag: missing means enabled. */
+export function isScheduleEnabled(subject: Pick<Subject, "scheduleEnabled">): boolean {
+  return subject.scheduleEnabled !== false;
+}
 
 /** Applies cancellations/restorations of chapter tasks depending on the chapter's exams. */
 export async function refreshChapterRelevance(chapterId: Id, now: string = nowIso()): Promise<void> {
@@ -47,7 +52,7 @@ export async function startChapterIfNeeded(chapterId: Id, today: DateKey = today
   const started = { ...chapter, startedAt: today, startedAtTs: now, updatedAt: now };
   await db.chapters.put(started);
   const strategy = getStrategy(subject.strategyType);
-  const tasks = generateChapterTasks({ chapter: started, subject, strategy, j0: today, today, now });
+  const tasks = isScheduleEnabled(subject) ? generateChapterTasks({ chapter: started, subject, strategy, j0: today, today, now }) : [];
   if (tasks.length) await db.tasks.bulkAdd(tasks);
   await refreshChapterRelevance(chapterId, now);
   return true;
@@ -78,7 +83,7 @@ export async function addExam(input: AddExamInput, today: DateKey = todayKey(), 
     };
     await db.exams.add(exam);
     const strategy = getStrategy(subject.strategyType);
-    const tasks = generateExamTasks({ exam, chapter, subject, strategy, today, now });
+    const tasks = isScheduleEnabled(subject) ? generateExamTasks({ exam, chapter, subject, strategy, today, now }) : [];
     if (tasks.length) await db.tasks.bulkAdd(tasks);
     await refreshChapterRelevance(chapter.id, now);
     return exam;
@@ -101,7 +106,7 @@ export async function updateExam(
       const chapter = await db.chapters.get(exam.chapterId);
       const subject = chapter ? await db.subjects.get(chapter.subjectId) : undefined;
       if (chapter && subject) {
-        const fresh = generateExamTasks({ exam: merged, chapter, subject, strategy: getStrategy(subject.strategyType), today, now });
+        const fresh = isScheduleEnabled(subject) ? generateExamTasks({ exam: merged, chapter, subject, strategy: getStrategy(subject.strategyType), today, now }) : [];
         const existing = await db.tasks.where("examId").equals(examId).and((t) => t.taskType === "EXAM").toArray();
         const { toDelete, toCreate } = reconcileExamTasks(existing, fresh);
         if (toDelete.length) await db.tasks.bulkDelete(toDelete);

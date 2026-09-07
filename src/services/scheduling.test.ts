@@ -154,6 +154,26 @@ describe("Missed tasks (Test §89)", () => {
   });
 });
 
+describe("Per-subject automatic schedule toggle", () => {
+  it("generates nothing when the subject has the programme disabled, exams are still tracked", async () => {
+    const maths = await mathsSubject();
+    await db.subjects.update(maths.id, { scheduleEnabled: false });
+    const chapter = await addChapter(maths.id, "Suites");
+    const r = await addCourse({ chapterId: chapter.id, title: "C1", type: "MANUAL", extractedText: "", extractionStatus: "MANUAL" }, "2026-09-01", NOW);
+    expect(r.chapterStarted).toBe(true);
+    expect((await db.chapters.get(chapter.id))?.startedAt).toBe("2026-09-01");
+    expect(await db.tasks.count()).toBe(0);
+    const exam = await addExam({ chapterId: chapter.id, name: "DS", date: "2026-09-20", frenchType: null }, "2026-09-01", NOW);
+    expect(await db.tasks.count()).toBe(0);
+    expect(await db.exams.get(exam.id)).toBeDefined();
+    // Re-enabled: the next chapter gets its tasks.
+    await db.subjects.update(maths.id, { scheduleEnabled: true });
+    const chapter2 = await addChapter(maths.id, "Probabilités");
+    await addCourse({ chapterId: chapter2.id, title: "C1", type: "MANUAL", extractedText: "", extractionStatus: "MANUAL" }, "2026-09-01", NOW);
+    expect(await db.tasks.where("chapterId").equals(chapter2.id).count()).toBe(5);
+  });
+});
+
 describe("Exam result (Test §90)", () => {
   it("Non creates exactly +1 h, even when answered several times", async () => {
     const maths = await mathsSubject();

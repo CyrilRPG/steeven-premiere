@@ -10,7 +10,7 @@ Cours → Chapitre → J0 → J1 / J3 / J7 / J14 → Contrôle → J-3 / J-2 / J
 - Local-first : toutes les données sont dans IndexedDB (Dexie). Pas de compte, pas de login.
 - PWA installable (Android, iOS, ordinateur), fonctionne hors ligne après une première ouverture.
 - Sauvegarde/restauration portable (JSON ou ZIP avec fichiers) pour changer de téléphone.
-- Flashcards IA (clé serveur optionnelle) et export Anki (TSV UTF-8).
+- Flashcards importées depuis un script ou un chat IA (JSON, TSV, CSV, texte), export Anki (TSV UTF-8). Aucune clé API nécessaire.
 
 ## Lancer
 
@@ -46,11 +46,9 @@ Variables d'environnement (voir `.env.example`) — toutes facultatives :
 
 | Variable | Rôle |
 | --- | --- |
-| `ANTHROPIC_API_KEY` | Active « Générer les flashcards » (appels IA côté serveur uniquement). |
-| `AI_MODEL` | Modèle utilisé (défaut `claude-opus-5`). |
 | `YOUTUBE_API_KEY` | Active la recherche automatique de vidéos (YouTube Data API v3). |
 
-Sans clé, l'application reste entièrement fonctionnelle : planning, tâches, contrôles, résultats, statistiques, sauvegarde, cartes manuelles et export Anki. Les boutons concernés affichent « Génération IA non configurée » / « Recherche automatique non configurée ».
+Sans clé, l'application reste entièrement fonctionnelle : planning, tâches, contrôles, résultats, statistiques, sauvegarde, flashcards et export Anki. Le bouton de recherche automatique affiche « Recherche automatique non configurée ».
 
 ## Structure
 
@@ -65,7 +63,7 @@ src/
     scheduling/         moteur des J (fonctions pures + tests)
   db/                   schéma Dexie/IndexedDB, arborescence par défaut, réglages
   services/             opérations base (planning, cours, arborescence, flashcards, ressources,
-                        sauvegarde, statistiques, notifications, extraction de fichiers, IA)
+                        sauvegarde, statistiques, notifications, extraction de fichiers, import de flashcards)
   features/             pages : dashboard, subjects, chapters, courses, exams, tasks,
                         flashcards, statistics, settings, principles, calendar, resources
   hooks/ lib/           hooks React, dates locales, routeur client, téléchargement
@@ -75,6 +73,9 @@ public/sw.js            Service Worker (cache hors ligne + notification en arri�
 ### Règles métier (src/domain/scheduling/engine.ts)
 
 - J0 = jour d'ajout du **premier** cours ; les cours suivants ne changent rien ; renommer ou supprimer un cours ne change pas J0.
+- Règle du week-end : si J1 tombe un samedi, tout le planning du chapitre est décalé d'un jour (J1 dimanche, J3 mardi…). La tâche J1 apparaît quand même le samedi dans Aujourd'hui, mais sa date limite est dimanche minuit.
+- Matières Osef (Histoire-Géo, Ens. scientifique, Anglais, Espagnol) : le premier cours crée une seule tâche J0 « Devoir + matière » ; le reste dépend du contrôle (J-2, J-1, jour J).
+- Chaque matière a un interrupteur « Appliquer le programme automatique » (page Matières ou page de la matière). Désactivé : aucune tâche générée, les contrôles restent suivis.
 - Les tâches ne sont créées que pour des dates ≥ aujourd'hui.
 - Une tâche terminée ou ratée n'est jamais modifiée par le moteur.
 - Changement de date d'un contrôle : les tâches à venir sont remplacées, l'historique est conservé.
@@ -114,10 +115,11 @@ Objectif : une notification « Programme du jour » à 17:00 (heure locale, conf
 
 Sur iPhone, les notifications ne fonctionnent qu'une fois l'application ajoutée à l'écran d'accueil (iOS 16.4+).
 
-## IA et ressources
+## Flashcards et ressources
 
-- L'IA est appelée uniquement par une action explicite (« Générer les flashcards ») après un message indiquant que le contenu sélectionné sera envoyé au fournisseur configuré. Les cours longs sont découpés en lots, fusionnés, dédoublonnés.
-- Aucune clé n'est jamais envoyée au navigateur : les routes `/api/ai/*` et `/api/resources/*` tournent côté serveur.
+- L'application ne contient aucune IA. Depuis un chapitre : « Copier le prompt + cours » copie un prompt (cartes exhaustives, réponses courtes, JSON) avec le texte des cours sélectionnés ; on le colle dans ChatGPT, Claude ou Gemini, puis on importe la réponse avec « Importer des cartes ».
+- Formats d'import acceptés (fichier ou collage) : JSON `[{"front":"…","back":"…"}]` ou `{"cards":[…]}`, TSV « question ⇥ réponse ⇥ tags » (un export Anki se réimporte), CSV « question;réponse », blocs « Q: … / R: … » ou « question :: réponse ». Les doublons sont ignorés.
+- Aucune clé n'est jamais envoyée au navigateur : la route `/api/resources/*` tourne côté serveur.
 - Sans clé YouTube, l'application propose des liens de recherche (YouTube/Google) construits à partir de la matière, du chapitre et du J, plus l'ajout manuel de ressources. Aucun lien n'est inventé.
 
 ## Limites connues
