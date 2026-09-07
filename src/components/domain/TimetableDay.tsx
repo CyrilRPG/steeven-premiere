@@ -15,7 +15,7 @@ interface Props {
 export function TimetableDay({ slots, nowHHMM, emptyLabel = "Pas de cours.", onSelect }: Props) {
   if (slots.length === 0) return <p className="px-3.5 py-3 text-sm text-muted">{emptyLabel}</p>;
   // A/B half-group slots at the same time count once.
-  const unique = Array.from(new Map(slots.map((s) => [, s])).values());
+  const unique = Array.from(new Map(slots.map((s) => [`${s.start}-${s.end}`, s])).values());
   const total = unique.reduce((acc, s) => acc + slotMinutes(s), 0);
   return (
     <div>
