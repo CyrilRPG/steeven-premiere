@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, BookOpen, CalendarDays, CalendarRange, ClipboardList, Compass, Layers, Menu, Search, Settings, Sun, XCircle, type LucideIcon } from "lucide-react";
+import { BarChart3, BookOpen, Brain, CalendarDays, CalendarRange, ClipboardList, Compass, Layers, Menu, Search, Settings, Sun, XCircle, type LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { cx, Modal } from "@/components/ui/primitives";
@@ -18,6 +18,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Aujourd'hui", href: paths.today(), icon: Sun, match: ["today", "task"] },
   { label: "Matières", href: paths.subjects(), icon: BookOpen, match: ["subjects", "subject", "chapter"] },
   { label: "Contrôles", href: paths.exams(), icon: ClipboardList, match: ["exams"] },
+  { label: "Réviser", href: paths.review(), icon: Brain, match: ["review"] },
   { label: "Flashcards", href: paths.flashcards(), icon: Layers, match: ["flashcards"] },
   { label: "Tâches ratées", href: paths.missed(), icon: XCircle, match: ["missed"] },
   { label: "Statistiques", href: paths.stats(), icon: BarChart3, match: ["stats"] },

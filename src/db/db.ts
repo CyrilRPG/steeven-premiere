@@ -1,8 +1,10 @@
 import Dexie, { type EntityTable } from "dexie";
 import { weekendShiftPatch } from "@/domain/scheduling/engine";
 import type { TimetableSlot } from "@/domain/timetable";
+import { initialSrs } from "@/domain/srs";
 import type {
   AnkiExport,
+  CalendarEvent,
   Chapter,
   Course,
   Exam,
@@ -11,6 +13,7 @@ import type {
   Folder,
   MetaEntry,
   Resource,
+  ReviewLog,
   Settings,
   StoredFile,
   Subject,
@@ -37,6 +40,8 @@ export class SteevenDatabase extends Dexie {
   settings!: EntityTable<Settings, "id">;
   meta!: EntityTable<MetaEntry, "key">;
   timetable!: EntityTable<TimetableSlot, "id">;
+  reviews!: EntityTable<ReviewLog, "id">;
+  events!: EntityTable<CalendarEvent, "id">;
 
   constructor(name = "steeven-premiere") {
     super(name);
@@ -93,10 +98,23 @@ export class SteevenDatabase extends Dexie {
       });
     // v4: weekly timetable (emploi du temps).
     this.version(4).stores({ timetable: "id, weekday" });
+    // v5: spaced repetition (Anki-like) on flashcards, review log, calendar events.
+    this.version(5)
+      .stores({
+        flashcards: "id, chapterId, srsState, srsDue",
+        reviews: "id, cardId, chapterId, day, reviewedAt",
+        events: "id, date",
+      })
+      .upgrade(async (tx) => {
+        const defaults = initialSrs();
+        await tx.table("flashcards").toCollection().modify((f: Partial<Flashcard>) => {
+          if (f.srsState === undefined) Object.assign(f, defaults);
+        });
+      });
   }
 }
 
-export const DB_SCHEMA_VERSION = 4;
+export const DB_SCHEMA_VERSION = 5;
 
 export const db = new SteevenDatabase();
 
@@ -114,6 +132,8 @@ export const DATA_TABLES = [
   "settings",
   "meta",
   "timetable",
+  "reviews",
+  "events",
 ] as const;
 
 export type DataTableName = (typeof DATA_TABLES)[number];

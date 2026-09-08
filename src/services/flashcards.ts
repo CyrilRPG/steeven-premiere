@@ -3,6 +3,7 @@ import type { AnkiExport, Flashcard, Id } from "@/domain/types";
 import { newId, nowIso } from "@/lib/ids";
 import { ankiFileName, buildAnkiTsv, buildHierarchicalTag } from "@/services/anki";
 import { normalizeCardKey, type ImportedCard } from "@/services/flashcards-import";
+import { initialSrs } from "@/domain/srs";
 import { todayKey } from "@/lib/dates";
 
 export interface SaveImportedInput {
@@ -42,6 +43,7 @@ export async function saveImportedFlashcards(input: SaveImportedInput): Promise<
         tags: card.tags && card.tags.length ? Array.from(new Set([tag, ...card.tags])) : [tag],
         sourceCourseIds: input.sourceCourseIds,
         origin: "IMPORT",
+        ...initialSrs(),
         createdAt: now,
         updatedAt: now,
       });
@@ -61,6 +63,7 @@ export async function addManualFlashcard(chapterId: Id, front: string, back: str
     tags: [buildHierarchicalTag(subjectName, chapterName)],
     sourceCourseIds: [],
     origin: "MANUAL",
+    ...initialSrs(),
     createdAt: now,
     updatedAt: now,
   };

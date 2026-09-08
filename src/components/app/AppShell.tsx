@@ -26,6 +26,7 @@ import { StatsPage } from "@/features/statistics/StatsPage";
 import { SubjectPage } from "@/features/subjects/SubjectPage";
 import { SubjectsPage } from "@/features/subjects/SubjectsPage";
 import { TimetablePage } from "@/features/timetable/TimetablePage";
+import { ReviewPage } from "@/features/review/ReviewPage";
 
 function Pages() {
   const { route } = useRouter();
@@ -58,6 +59,8 @@ function Pages() {
       return <CalendarPage today={today} />;
     case "timetable":
       return <TimetablePage today={today} />;
+    case "review":
+      return <ReviewPage chapterId={route.chapterId} session={route.session} />;
     default:
       return (
         <div className="py-12 text-center text-muted">

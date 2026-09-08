@@ -16,6 +16,7 @@ export type Route =
   | { name: "settings" }
   | { name: "calendar" }
   | { name: "timetable" }
+  | { name: "review"; chapterId?: string; session?: boolean }
   | { name: "notFound" };
 
 export function parseRoute(pathname: string, search: string): Route {
@@ -45,6 +46,8 @@ export function parseRoute(pathname: string, search: string): Route {
       return { name: "calendar" };
     case "emploi-du-temps":
       return { name: "timetable" };
+    case "reviser":
+      return { name: "review", chapterId: params.get("chapitre") ?? undefined, session: params.get("session") === "1" };
     default:
       return { name: "notFound" };
   }
@@ -64,6 +67,7 @@ export const paths = {
   settings: () => "/parametres",
   calendar: () => "/calendrier",
   timetable: () => "/emploi-du-temps",
+  review: (chapterId?: string, session?: boolean) => (chapterId ? `/reviser?chapitre=${encodeURIComponent(chapterId)}` : session ? "/reviser?session=1" : "/reviser"),
 };
 
 interface RouterState {

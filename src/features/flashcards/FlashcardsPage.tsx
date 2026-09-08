@@ -1,7 +1,7 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import { ClipboardCopy, Download, Layers, Plus, Trash2, Upload } from "lucide-react";
+import { Brain, ClipboardCopy, Download, Layers, Plus, Trash2, Upload } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Button, EmptyState, Field, InlineError, InlineInfo, Modal, PageHeader, SectionTitle, Select, Textarea, cx } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
@@ -12,6 +12,8 @@ import { downloadBlob } from "@/lib/download";
 import { paths, useRouter } from "@/lib/router";
 import { addManualFlashcard, deleteChapterFlashcards, deleteFlashcard, exportChapterToAnki, saveImportedFlashcards, updateFlashcard } from "@/services/flashcards";
 import { buildGenerationPrompt, parseFlashcards, type ImportResult } from "@/services/flashcards-import";
+import { formatEase, summarizeQueue } from "@/domain/srs";
+import { Badge } from "@/components/ui/primitives";
 
 export function FlashcardsPage({ chapterId }: { chapterId?: string }) {
   const { navigate } = useRouter();
@@ -86,6 +88,8 @@ function ChapterFlashcards({ chapter, subject, cards }: { chapter: Chapter; subj
   const [adding, setAdding] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const sorted = useMemo(() => [...cards].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)), [cards]);
+  const queue = useMemo(() => summarizeQueue(cards, new Date()), [cards]);
+  const dueCount = queue.newCount + queue.learningCount + queue.reviewCount;
 
   const exportAnki = async () => {
     const result = await exportChapterToAnki(chapter.id, subject.name, chapter.name);
@@ -104,8 +108,13 @@ function ChapterFlashcards({ chapter, subject, cards }: { chapter: Chapter; subj
         title="Flashcards"
         subtitle={`${cards.length} carte${cards.length > 1 ? "s" : ""}`}
       />
+      {cards.length > 0 && (
+        <Button variant="primary" size="lg" className="w-full" onClick={() => navigate(paths.review(chapter.id))} icon={<Brain className="h-4 w-4" aria-hidden />}>
+          {dueCount > 0 ? `Réviser maintenant (${dueCount} carte${dueCount > 1 ? "s" : ""})` : "Réviser — rien de dû pour l'instant"}
+        </Button>
+      )}
       <div className="grid grid-cols-2 gap-2">
-        <Button variant="primary" onClick={() => setImporting(true)} icon={<Upload className="h-4 w-4" aria-hidden />}>
+        <Button onClick={() => setImporting(true)} icon={<Upload className="h-4 w-4" aria-hidden />}>
           Importer des cartes
         </Button>
         <Button onClick={() => setPrompting(true)} icon={<ClipboardCopy className="h-4 w-4" aria-hidden />} disabled={courses.length === 0}>
@@ -175,8 +184,9 @@ function CardEditor({ card, index }: { card: Flashcard; index: number }) {
   return (
     <li className="rounded-xl border border-border bg-surface p-3">
       <div className="mb-1 flex items-center justify-between text-xs text-muted">
-        <span>
+        <span className="flex flex-wrap items-center gap-1.5">
           #{index} · {card.origin === "MANUAL" ? "Manuelle" : "Importée"}
+          {card.srsState === "new" ? <Badge tone="info">nouvelle</Badge> : card.srsState === "review" ? <Badge tone="success">révision · {card.srsInterval} j · {formatEase(card.srsEase)}</Badge> : <Badge tone="warning">apprentissage</Badge>}
         </span>
         <button type="button" onClick={() => deleteFlashcard(card.id)} className="rounded-md p-1 hover:text-danger" aria-label="Supprimer la carte">
           <Trash2 className="h-4 w-4" />

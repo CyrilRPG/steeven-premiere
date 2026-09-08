@@ -10,7 +10,8 @@ Cours → Chapitre → J0 → J1 / J3 / J7 / J14 → Contrôle → J-3 / J-2 / J
 - Local-first : toutes les données sont dans IndexedDB (Dexie). Pas de compte, pas de login.
 - PWA installable (Android, iOS, ordinateur), fonctionne hors ligne après une première ouverture.
 - Sauvegarde/restauration portable (JSON ou ZIP avec fichiers) pour changer de téléphone.
-- Flashcards importées depuis un script ou un chat IA (JSON, TSV, CSV, texte), export Anki (TSV UTF-8). Aucune clé API nécessaire.
+- Flashcards importées depuis un script ou un chat IA (JSON, TSV, CSV, texte), révision espacée intégrée (algorithme SM-2 comme Anki : Again/Hard/Good/Easy, étapes 1 min / 10 min, facilité, oublis, 20 nouvelles cartes par jour), export Anki (TSV UTF-8). Aucune clé API nécessaire.
+- Emploi du temps (aujourd'hui / demain sur le tableau de bord, modifiable) et événements personnels dans le calendrier.
 
 ## Lancer
 
@@ -116,6 +117,8 @@ Objectif : une notification « Programme du jour » à 17:00 (heure locale, conf
 Sur iPhone, les notifications ne fonctionnent qu'une fois l'application ajoutée à l'écran d'accueil (iOS 16.4+).
 
 ## Flashcards et ressources
+
+- Révision dans l'app (page « Réviser », ou depuis un chapitre) : file d'attente Anki (apprentissage dû → révisions dues → nouvelles cartes → apprentissage jusqu'à 20 min en avance), boutons avec l'intervalle prévu, clavier Espace / 1-4, journal des révisions dans la table `reviews` (moteur pur dans `src/domain/srs.ts`, testé).
 
 - L'application ne contient aucune IA. Depuis un chapitre : « Copier le prompt + cours » copie un prompt (cartes exhaustives, réponses courtes, JSON) avec le texte des cours sélectionnés ; on le colle dans ChatGPT, Claude ou Gemini, puis on importe la réponse avec « Importer des cartes ».
 - Formats d'import acceptés (fichier ou collage) : JSON `[{"front":"…","back":"…"}]` ou `{"cards":[…]}`, TSV « question ⇥ réponse ⇥ tags » (un export Anki se réimporte), CSV « question;réponse », blocs « Q: … / R: … » ou « question :: réponse ». Les doublons sont ignorés.

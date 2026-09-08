@@ -1,4 +1,5 @@
 import type { DateKey } from "@/lib/dates";
+import type { SrsFields, SrsState } from "@/domain/srs";
 
 export type Id = string;
 
@@ -166,7 +167,7 @@ export interface Resource {
   createdAt: string;
 }
 
-export interface Flashcard {
+export interface Flashcard extends SrsFields {
   id: Id;
   chapterId: Id;
   front: string;
@@ -175,6 +176,32 @@ export interface Flashcard {
   sourceCourseIds: Id[];
   /** IMPORT = imported from a file/paste (AI kept for data created by earlier versions). */
   origin: "IMPORT" | "MANUAL" | "AI";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReviewLog {
+  id: Id;
+  cardId: Id;
+  chapterId: Id;
+  rating: 1 | 2 | 3 | 4;
+  reviewedAt: string;
+  /** Local date key of the review (daily counters). */
+  day: DateKey;
+  wasNew: boolean;
+  stateAfter: SrsState;
+  intervalAfter: number;
+}
+
+export type CalendarEventKind = "PERSONAL" | "SCHOOL" | "HOMEWORK" | "REMINDER";
+
+export interface CalendarEvent {
+  id: Id;
+  date: DateKey;
+  time: string | null; // "HH:MM"
+  title: string;
+  note: string;
+  kind: CalendarEventKind;
   createdAt: string;
   updatedAt: string;
 }

@@ -10,6 +10,7 @@ import type { Settings, StoredFile } from "@/domain/types";
 import { isValidKey, todayKey } from "@/lib/dates";
 import { nowIso } from "@/lib/ids";
 import { seedTimetableIfNeeded } from "@/services/timetable";
+import { initialSrs } from "@/domain/srs";
 
 export const BACKUP_FORMAT_VERSION = 1;
 export const BACKUP_APP = "steeven-premiere";
@@ -145,6 +146,12 @@ export function validateBackupDocument(raw: unknown): BackupDocument {
   for (const e of data.exams as Record<string, unknown>[]) {
     if (typeof e.id !== "string" || !isValidKey(e.date)) throw new BackupValidationError("Un contrôle est invalide.");
   }
+  for (const e of data.events as Record<string, unknown>[]) {
+    if (typeof e.id !== "string" || !isValidKey(e.date) || typeof e.title !== "string") throw new BackupValidationError("Un événement du calendrier est invalide.");
+  }
+  // Flashcards from versions without spaced repetition get fresh scheduling fields.
+  const srsDefaults = initialSrs();
+  data.flashcards = (data.flashcards as Record<string, unknown>[]).map((f) => (f.srsState === undefined ? { ...srsDefaults, ...f } : f));
   const files = Array.isArray(raw.files) ? (raw.files as BackupFileMeta[]) : [];
   return {
     app: BACKUP_APP,

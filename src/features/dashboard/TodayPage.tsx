@@ -6,6 +6,9 @@ import { useEffect, useMemo, useState } from "react";
 import { ExamResultCard } from "@/components/domain/ExamResultCard";
 import { TimetableDay } from "@/components/domain/TimetableDay";
 import { WEEKDAY_LABELS, slotsForDay, weekdayOf } from "@/domain/timetable";
+import { SRS_DEFAULTS, summarizeQueue } from "@/domain/srs";
+import { EVENT_KIND_LABELS } from "@/features/calendar/CalendarPage";
+import { newCardsSeenToday } from "@/services/review";
 import { TaskCard } from "@/components/domain/TaskCard";
 import { Card, EmptyState, ProgressBar, SectionTitle } from "@/components/ui/primitives";
 import { db } from "@/db/db";
@@ -32,6 +35,8 @@ export function TodayPage({ today }: { today: DateKey }) {
   const tomorrowSlots = slotsForDay(timetable, weekdayOf(tomorrow), settings.timetableGroup ?? null);
 
   const data = useLiveQuery(async () => {
+    const [flashcards, seenToday, events] = await Promise.all([db.flashcards.toArray(), newCardsSeenToday(), db.events.where("date").between(today, addDays(today, 1), true, true).toArray()]);
+    const queue = summarizeQueue(flashcards, new Date(), SRS_DEFAULTS.newCardsPerDay, seenToday);
     const [todayTasks, extra, upcomingExams, pastExams, results] = await Promise.all([
       db.tasks
         .where("scheduledDate")
@@ -47,6 +52,8 @@ export function TodayPage({ today }: { today: DateKey }) {
     ]);
     const answered = new Set(results.map((r) => r.examId));
     return {
+      dueCards: queue.newCount + queue.learningCount + queue.reviewCount,
+      events: events.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time ?? "").localeCompare(b.time ?? ""))),
       todayTasks,
       extra,
       upcomingExams: upcomingExams.sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 6),
@@ -90,6 +97,21 @@ export function TodayPage({ today }: { today: DateKey }) {
         </div>
       </section>
 
+      {data.events.length > 0 && (
+        <section>
+          <SectionTitle action={<Link href={paths.calendar()} className="text-sm font-medium text-accent">Calendrier</Link>}>Événements</SectionTitle>
+          <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
+            {data.events.map((e) => (
+              <li key={e.id} className="flex items-center gap-3 px-3.5 py-2.5 text-sm">
+                <span className="w-20 shrink-0 text-xs text-muted">{e.date === today ? "Aujourd'hui" : "Demain"}{e.time ? ` ${e.time}` : ""}</span>
+                <span className="min-w-0 flex-1 truncate font-medium">{e.title}</span>
+                <span className="shrink-0 text-xs text-muted">{EVENT_KIND_LABELS[e.kind]}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section>
         <SectionTitle>Programme du jour</SectionTitle>
         {sorted.length === 0 ? (
@@ -123,6 +145,12 @@ export function TodayPage({ today }: { today: DateKey }) {
               ))}
             </div>
           </>
+        )}
+        {data.dueCards > 0 && (
+          <Link href={paths.review(undefined, true)} className="mt-3 flex items-center justify-between rounded-xl border border-border bg-surface px-3.5 py-3 text-sm hover:bg-surface-2">
+            <span className="font-medium">Flashcards à réviser : {data.dueCards}</span>
+            <span className="text-accent">Réviser</span>
+          </Link>
         )}
       </section>
 
